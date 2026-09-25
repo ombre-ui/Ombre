@@ -1,0 +1,54 @@
+.app-shell {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.app-shell-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+.app-workspace {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.app-topbar { display: none; }
+
+@media (max-width: 767px) {
+  .app-topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .app-topbar-toggle {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    border-radius: var(--radius-sm);
+  }
+  .topbar-bar { display: block; width: 18px; height: 1.5px; background: var(--text-primary); border-radius: 2px; }
+  .app-topbar-wordmark { font-size: var(--text-md); color: var(--text-primary); }
+  .app-workspace { padding: var(--space-4); }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-workspace { padding: var(--space-5); }
+}

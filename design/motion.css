@@ -1,0 +1,106 @@
+/* ==========================================================================
+   OMBRE — MOTION SYSTEM
+   Principle: don't animate pages, animate relationships.
+   Every animation ends slightly slower than it begins (the "Settle" rule).
+   All motion is disabled under prefers-reduced-motion — see bottom of file.
+   ========================================================================== */
+
+:root {
+  --motion-instant: 100ms;
+  --motion-fast: 180ms;
+  --motion-standard: 320ms;
+  --motion-slow: 600ms;
+  --motion-drift: 12000ms;
+
+  --ease-ombre: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-ombre-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-linear: linear;
+}
+
+@keyframes ombre-reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.motion-reveal { animation: ombre-reveal var(--motion-standard) var(--ease-ombre) both; }
+.motion-reveal[style*="--motion-delay"] { animation-delay: var(--motion-delay); }
+
+@keyframes ombre-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-1.5%, 1%) scale(1.02); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.motion-drift { animation: ombre-drift var(--motion-drift) var(--ease-ombre-in-out) infinite; }
+
+.motion-expand {
+  transition: transform var(--motion-slow) var(--ease-ombre),
+              opacity var(--motion-slow) var(--ease-ombre);
+  transform-origin: top left;
+}
+.motion-expand[data-state="collapsed"] { transform: scale(0.96); opacity: 0.85; }
+.motion-expand[data-state="expanded"]  { transform: scale(1);    opacity: 1; }
+
+@keyframes ombre-connect-draw {
+  from { stroke-dashoffset: var(--trace-length, 100); opacity: 0; }
+  to   { stroke-dashoffset: 0; opacity: 1; }
+}
+.motion-connect path {
+  stroke: var(--accent);
+  stroke-width: 1;
+  fill: none;
+  stroke-dasharray: var(--trace-length, 100);
+  animation: ombre-connect-draw var(--motion-slow) var(--ease-ombre) both;
+}
+.motion-connect.is-settled path {
+  transition: opacity var(--motion-slow) var(--ease-ombre);
+  opacity: 0;
+}
+
+.motion-focus-group > * {
+  transition: opacity var(--motion-standard) var(--ease-ombre),
+              filter var(--motion-standard) var(--ease-ombre);
+}
+.motion-focus-group:has([data-focused="true"]) > *:not([data-focused="true"]) {
+  opacity: 0.55;
+  filter: saturate(0.85);
+}
+.motion-focus-group > .is-unfocused { opacity: 0.55; filter: saturate(0.85); }
+
+@keyframes ombre-return {
+  from { opacity: 0; transform: scale(0.99); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.motion-return { animation: ombre-return var(--motion-standard) var(--ease-ombre) both; }
+
+@keyframes ombre-settle-shadow {
+  from { box-shadow: var(--shadow-sm); }
+  to   { box-shadow: var(--shadow-md); }
+}
+.motion-settle { animation: ombre-settle-shadow var(--motion-slow) var(--ease-ombre) both; }
+
+.motion-interactive {
+  transition: background-color var(--motion-fast) var(--ease-ombre),
+              border-color var(--motion-fast) var(--ease-ombre),
+              box-shadow var(--motion-fast) var(--ease-ombre),
+              transform var(--motion-fast) var(--ease-ombre);
+}
+.motion-interactive:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-reveal,
+  .motion-drift,
+  .motion-connect path,
+  .motion-return,
+  .motion-settle {
+    animation: none !important;
+  }
+  .motion-reveal { opacity: 1; transform: none; }
+  .motion-connect path { stroke-dashoffset: 0; opacity: 1; }
+  .motion-expand,
+  .motion-focus-group > *,
+  .motion-interactive {
+    transition-duration: 1ms !important;
+  }
+}
