@@ -45,12 +45,21 @@
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--space-5);
 }
+.conversation-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.conversation-mentor-path { display: block; }
 .conversation-title {
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.conversation-mentor-intro { margin: 0 0 var(--space-4); }
 
 .message-list {
   flex: 1;
