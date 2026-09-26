@@ -1,0 +1,85 @@
+/**
+ * Ombre — frontend data shapes.
+ *
+ * The project is plain JS (not TypeScript), so these are documented factory
+ * functions rather than compiled interfaces. They exist so every part of the
+ * app creates these objects in exactly one shape, which is what makes it
+ * possible to swap the mock store (`./store.jsx`) for real API / Supabase
+ * calls later without touching component code.
+ *
+ * @typedef {'user' | 'assistant'} MessageRole
+ * @typedef {'pending' | 'complete' | 'error'} MessageStatus
+ * @typedef {'idle' | 'generating' | 'error'} GenerationState
+ *
+ * @typedef {Object} Attachment
+ * @property {string} id
+ * @property {string} name
+ * @property {number} size
+ * @property {string} type
+ *
+ * @typedef {Object} Message
+ * @property {string} id
+ * @property {string} conversationId
+ * @property {MessageRole} role
+ * @property {string} content
+ * @property {MessageStatus} status
+ * @property {Attachment[]} attachments
+ * @property {string} createdAt  ISO timestamp
+ *
+ * @typedef {Object} Conversation
+ * @property {string} id
+ * @property {string} title
+ * @property {string|null} projectId
+ * @property {Message[]} messages
+ * @property {string} createdAt
+ * @property {string} updatedAt
+ *
+ * @typedef {Object} Project
+ * @property {string} id
+ * @property {string} name
+ * @property {string} description
+ * @property {string[]} conversationIds
+ * @property {string} createdAt
+ */
+
+export function createId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+/** @returns {Conversation} */
+export function makeConversation({ projectId = null } = {}) {
+  const now = new Date().toISOString()
+  return {
+    id: createId(),
+    title: 'Untitled conversation',
+    projectId,
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+/** @returns {Message} */
+export function makeMessage({ conversationId, role, content, status = 'complete', attachments = [] }) {
+  return {
+    id: createId(),
+    conversationId,
+    role,
+    content,
+    status,
+    attachments,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+/** @returns {Project} */
+export function makeProject({ name, description = '' }) {
+  return {
+    id: createId(),
+    name,
+    description,
+    conversationIds: [],
+    createdAt: new Date().toISOString(),
+  }
+}

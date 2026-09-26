@@ -14,18 +14,21 @@ import {
 } from 'lucide-react'
 import './Sidebar.css'
 
+// Note: `end` is intentionally omitted (defaults to false) so General AI and
+// Projects stay marked active for their nested routes too
+// (/app/general/:conversationId, /app/projects/:projectId).
 const NAV_ITEMS = [
-  { to: '/', label: 'General AI', icon: Sparkles, end: true },
-  { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/mentors', label: 'Mentors', icon: Compass },
-  { to: '/library', label: 'Library', icon: LibraryIcon },
-  { to: '/history', label: 'History', icon: HistoryIcon },
-  { to: '/memory', label: 'Memory', icon: CircleDot },
+  { to: '/app/general', label: 'General AI', icon: Sparkles },
+  { to: '/app/projects', label: 'Projects', icon: FolderKanban },
+  { to: '/app/mentors', label: 'Mentors', icon: Compass },
+  { to: '/app/library', label: 'Library', icon: LibraryIcon },
+  { to: '/app/history', label: 'History', icon: HistoryIcon },
+  { to: '/app/memory', label: 'Memory', icon: CircleDot },
 ]
 
 const FOOTER_ITEMS = [
-  { to: '/profile', label: 'Profile', icon: CircleUserRound },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon },
+  { to: '/app/profile', label: 'Profile', icon: CircleUserRound },
+  { to: '/app/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
 export default function Sidebar({
@@ -49,8 +52,6 @@ export default function Sidebar({
         aria-label="Primary"
       >
         <div className="sidebar-top">
-          {/* On mobile the topbar hamburger already opens/closes this drawer —
-              don't duplicate that control inside the drawer itself. */}
           {!isMobile && (
             <button
               className="sidebar-toggle motion-interactive"
@@ -66,11 +67,10 @@ export default function Sidebar({
 
         <nav className="sidebar-nav">
           <ul>
-            {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+            {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
               <li key={to}>
                 <NavLink
                   to={to}
-                  end={end}
                   className={({ isActive }) =>
                     `sidebar-link motion-interactive ${isActive ? 'is-active' : ''}`
                   }
