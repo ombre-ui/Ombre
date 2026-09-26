@@ -33,6 +33,7 @@ export default function Sidebar({
   onToggle,
   mobileOpen,
   onCloseMobile,
+  isMobile,
   theme,
   onToggleTheme,
 }) {
@@ -42,20 +43,24 @@ export default function Sidebar({
         <div className="sidebar-scrim motion-reveal" onClick={onCloseMobile} aria-hidden="true" />
       )}
       <aside
-        className={`sidebar motion-reveal ${collapsed ? 'is-collapsed' : ''} ${
+        className={`sidebar ${collapsed ? 'is-collapsed' : ''} ${
           mobileOpen ? 'is-mobile-open' : ''
         }`}
         aria-label="Primary"
       >
         <div className="sidebar-top">
-          <button
-            className="sidebar-toggle motion-interactive"
-            onClick={onToggle}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-expanded={!collapsed}
-          >
-            <Menu size={18} strokeWidth={1.75} />
-          </button>
+          {/* On mobile the topbar hamburger already opens/closes this drawer —
+              don't duplicate that control inside the drawer itself. */}
+          {!isMobile && (
+            <button
+              className="sidebar-toggle motion-interactive"
+              onClick={onToggle}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-expanded={!collapsed}
+            >
+              <Menu size={18} strokeWidth={1.75} />
+            </button>
+          )}
           {!collapsed && <span className="sidebar-wordmark text-wordmark">ombre</span>}
         </div>
 
