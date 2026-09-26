@@ -55,6 +55,17 @@ export default function AppShell({ children }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // Prevent the page behind the drawer from scrolling while it's open.
+  useEffect(() => {
+    if (isMobile && mobileOpen) {
+      const previous = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = previous
+      }
+    }
+  }, [isMobile, mobileOpen])
+
   const handleToggle = () => {
     if (isMobile) setMobileOpen((v) => !v)
     else setCollapsed((v) => !v)
@@ -67,6 +78,7 @@ export default function AppShell({ children }) {
         onToggle={handleToggle}
         mobileOpen={isMobile && mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
+        isMobile={isMobile}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
