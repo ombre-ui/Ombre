@@ -1,0 +1,87 @@
+/* ==========================================================================
+   MENTORS — uses only /design tokens. .section-warm (from tokens.css)
+   gives this area its warmer lean, per the Ombre "temperature not hue" rule.
+   ========================================================================== */
+
+.mentors-page,
+.mentor-category-page {
+  max-width: 880px;
+  margin: 0 auto;
+  /* .section-warm redefines --surface/--surface-elevated/--accent; give the
+     page itself a subtle warm background so the temperature shift reads
+     beyond just the cards. */
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.mentors-header { margin-bottom: var(--space-6); }
+.mentors-header p { margin-top: var(--space-2); }
+
+.mentors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.mentor-category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  text-align: left;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  cursor: pointer;
+}
+.mentor-category-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+.mentor-category-card:hover[data-state="collapsed"] { transform: scale(1.01); }
+
+.mentor-category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--accent);
+}
+.mentor-category-icon-lg { width: 52px; height: 52px; }
+
+.mentor-category-name { margin: 0; }
+.mentor-category-description { margin: 0; }
+
+.mentors-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0;
+  margin-bottom: var(--space-5);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.mentors-back:hover { color: var(--text-primary); }
+
+.mentor-category-header { margin-bottom: var(--space-6); display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
+.mentor-category-header p { margin: 0; max-width: 60ch; }
+
+.mentor-category-placeholder {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .mentors-page, .mentor-category-page { padding: var(--space-4); }
+  .mentors-grid { grid-template-columns: 1fr; }
+}

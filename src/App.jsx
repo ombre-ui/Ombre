@@ -4,8 +4,9 @@ import { OmbreDataProvider } from './lib/store.jsx'
 import GeneralAIPage from './features/general-ai/GeneralAIPage.jsx'
 import ProjectsOverviewPage from './features/projects/ProjectsOverviewPage.jsx'
 import ProjectWorkspacePage from './features/projects/ProjectWorkspacePage.jsx'
-import Mentors from './pages/Mentors.jsx'
-import Library from './pages/Library.jsx'
+import MentorsPage from './features/mentors/MentorsPage.jsx'
+import MentorCategoryPage from './features/mentors/MentorCategoryPage.jsx'
+import LibraryPage from './features/library/LibraryPage.jsx'
 import History from './pages/History.jsx'
 import Memory from './pages/Memory.jsx'
 import Profile from './pages/Profile.jsx'
@@ -24,8 +25,11 @@ export default function App() {
           <Route path="/app/projects" element={<ProjectsOverviewPage />} />
           <Route path="/app/projects/:projectId" element={<ProjectWorkspacePage />} />
 
-          <Route path="/app/mentors" element={<Mentors />} />
-          <Route path="/app/library" element={<Library />} />
+          <Route path="/app/mentors" element={<MentorsPage />} />
+          <Route path="/app/mentors/:categoryId" element={<MentorCategoryPage />} />
+
+          <Route path="/app/library" element={<LibraryPage />} />
+
           <Route path="/app/history" element={<History />} />
           <Route path="/app/memory" element={<Memory />} />
           <Route path="/app/profile" element={<Profile />} />
