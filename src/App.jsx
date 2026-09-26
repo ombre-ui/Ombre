@@ -6,6 +6,8 @@ import ProjectsOverviewPage from './features/projects/ProjectsOverviewPage.jsx'
 import ProjectWorkspacePage from './features/projects/ProjectWorkspacePage.jsx'
 import MentorsPage from './features/mentors/MentorsPage.jsx'
 import MentorCategoryPage from './features/mentors/MentorCategoryPage.jsx'
+import MentorSubcategoryPage from './features/mentors/MentorSubcategoryPage.jsx'
+import MentorProfilePage from './features/mentors/MentorProfilePage.jsx'
 import LibraryPage from './features/library/LibraryPage.jsx'
 import History from './pages/History.jsx'
 import Memory from './pages/Memory.jsx'
@@ -27,6 +29,11 @@ export default function App() {
 
           <Route path="/app/mentors" element={<MentorsPage />} />
           <Route path="/app/mentors/:categoryId" element={<MentorCategoryPage />} />
+          <Route path="/app/mentors/:categoryId/:subcategoryId" element={<MentorSubcategoryPage />} />
+          <Route
+            path="/app/mentors/:categoryId/:subcategoryId/:mentorId"
+            element={<MentorProfilePage />}
+          />
 
           <Route path="/app/library" element={<LibraryPage />} />
 

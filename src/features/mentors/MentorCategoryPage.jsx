@@ -34,10 +34,20 @@ export default function MentorCategoryPage() {
         <p className="text-body text-secondary">{category.description}</p>
       </header>
 
-      <div className="mentor-category-placeholder">
-        <p className="text-body-sm text-secondary">
-          Subcategories and individual mentors for {category.name} are coming in a later phase.
-        </p>
+      <div className="mentors-grid">
+        {category.subcategories.map((sub) => (
+          <button
+            key={sub.id}
+            type="button"
+            className="mentor-card motion-interactive motion-reveal"
+            onClick={() => navigate(`/app/mentors/${category.id}/${sub.id}`)}
+          >
+            <h3 className="text-heading-sm mentor-card-name">{sub.name}</h3>
+            <p className="text-meta">
+              {sub.mentors.length} {sub.mentors.length === 1 ? 'mentor' : 'mentors'}
+            </p>
+          </button>
+        ))}
       </div>
     </div>
   )

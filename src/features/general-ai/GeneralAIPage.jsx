@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useOmbreData } from '../../lib/store.jsx'
+import { getMentorWithPath } from '../mentors/categories.js'
 import EmptyStart from './EmptyStart.jsx'
 import ConversationView from './ConversationView.jsx'
 import './general-ai.css'
@@ -19,6 +20,8 @@ export default function GeneralAIPage() {
     navigate('/app/general', { replace: true })
     return null
   }
+
+  const mentorContext = conversation?.mentorId ? getMentorWithPath(conversation.mentorId) : null
 
   function handleFirstSend(text) {
     const id = createConversation({})
@@ -46,6 +49,7 @@ export default function GeneralAIPage() {
       ) : (
         <ConversationView
           conversation={conversation}
+          mentorContext={mentorContext}
           onSend={handleSend}
           onRetry={handleRetry}
           onLinked={handleLinked}
