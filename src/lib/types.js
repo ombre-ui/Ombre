@@ -52,6 +52,13 @@
  * @property {string} preview           short plain-text preview/snippet
  * @property {string|null} projectId
  * @property {string} createdAt
+ *
+ * @typedef {Object} MemoryItem
+ * @property {string} id
+ * @property {string} label       short category/title, e.g. "Preference", "Project context"
+ * @property {string} content     the remembered text itself
+ * @property {string} createdAt
+ * @property {string} updatedAt
  */
 
 export function createId() {
@@ -107,5 +114,17 @@ export function makeLibraryItem({ title, source, kind = 'note', preview = '', pr
     preview,
     projectId,
     createdAt: createdAt ?? new Date().toISOString(),
+  }
+}
+
+/** @returns {MemoryItem} */
+export function makeMemoryItem({ label = 'Note', content, createdAt }) {
+  const now = createdAt ?? new Date().toISOString()
+  return {
+    id: createId(),
+    label,
+    content,
+    createdAt: now,
+    updatedAt: now,
   }
 }
