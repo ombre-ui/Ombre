@@ -30,6 +30,7 @@
  * @property {string} id
  * @property {string} title
  * @property {string|null} projectId
+ * @property {string|null} mentorId   references a mentor id from features/mentors/categories.js
  * @property {Message[]} messages
  * @property {string} createdAt
  * @property {string} updatedAt
@@ -59,12 +60,13 @@ export function createId() {
 }
 
 /** @returns {Conversation} */
-export function makeConversation({ projectId = null } = {}) {
+export function makeConversation({ projectId = null, mentorId = null } = {}) {
   const now = new Date().toISOString()
   return {
     id: createId(),
     title: 'Untitled conversation',
     projectId,
+    mentorId,
     messages: [],
     createdAt: now,
     updatedAt: now,
