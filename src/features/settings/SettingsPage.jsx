@@ -8,6 +8,7 @@ const SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'privacy', label: 'Privacy' },
+  { id: 'memory', label: 'Memory' },
   { id: 'ai', label: 'AI & Personalization' },
   { id: 'account', label: 'Account' },
   { id: 'about', label: 'About' },
@@ -32,6 +33,7 @@ export default function SettingsPage() {
 
   const settings = getSettings()
   const profile = getProfile()
+  const memoryCount = listMemoryItems().length
   const [toast, setToast] = useState(null)
 
   function patchSection(section, patch) {
@@ -129,7 +131,7 @@ export default function SettingsPage() {
       {/* ---- Privacy ---- */}
       <section id="privacy" className="settings-section">
         <h2 className="text-heading-sm">Privacy</h2>
-        <p className="text-body-sm text-secondary settings-section-intro">Data, memory, and conversation controls.</p>
+        <p className="text-body-sm text-secondary settings-section-intro">Data and conversation controls.</p>
 
         <SettingsToggle
           label="Save conversation history"
@@ -137,17 +139,33 @@ export default function SettingsPage() {
           checked={settings.privacy.saveHistory}
           onChange={(v) => patchSection('privacy', { saveHistory: v })}
         />
-        <SettingsToggle
-          label="Remember context across conversations"
-          description="Allow Ombre to use Memory when responding."
-          checked={settings.privacy.rememberContext}
-          onChange={(v) => patchSection('privacy', { rememberContext: v })}
-        />
 
         <div className="settings-danger-row">
           <button type="button" className="settings-danger-btn motion-interactive" onClick={handleClearConversations}>
             Clear all conversations
           </button>
+        </div>
+      </section>
+
+      {/* ---- Memory ---- */}
+      <section id="memory" className="settings-section">
+        <h2 className="text-heading-sm">Memory</h2>
+        <p className="text-body-sm text-secondary settings-section-intro">
+          {memoryCount === 0 ? 'Nothing remembered yet.' : `${memoryCount} item${memoryCount === 1 ? '' : 's'} remembered.`}{' '}
+          <a href="/app/memory" className="settings-link-active">
+            View Memory
+          </a>
+          . Ombre doesn't extract memory automatically yet — everything there was added by hand.
+        </p>
+
+        <SettingsToggle
+          label="Remember context across conversations"
+          description="Allow General AI and mentors to use Memory when responding."
+          checked={settings.privacy.rememberContext}
+          onChange={(v) => patchSection('privacy', { rememberContext: v })}
+        />
+
+        <div className="settings-danger-row">
           <button type="button" className="settings-danger-btn motion-interactive" onClick={handleClearMemory}>
             Clear everything Ombre remembers
           </button>
