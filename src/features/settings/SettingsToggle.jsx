@@ -1,3 +1,5 @@
+import './settings.css'
+
 export default function SettingsToggle({ label, description, checked, onChange, disabled = false }) {
   return (
     <div className="settings-row">
