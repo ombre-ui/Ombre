@@ -59,6 +59,11 @@
  * @property {string} content     the remembered text itself
  * @property {string} createdAt
  * @property {string} updatedAt
+ *
+ * @typedef {Object} OmbreProfile
+ * @property {string} name            empty until the person fills it in — no real auth yet
+ * @property {string} email
+ * @property {string} localSince      ISO timestamp of first local use, NOT a real account creation date
  */
 
 export function createId() {
@@ -126,5 +131,14 @@ export function makeMemoryItem({ label = 'Note', content, createdAt }) {
     content,
     createdAt: now,
     updatedAt: now,
+  }
+}
+
+/** @returns {OmbreProfile} */
+export function makeProfile() {
+  return {
+    name: '',
+    email: '',
+    localSince: new Date().toISOString(),
   }
 }
