@@ -9,8 +9,8 @@ import MentorCategoryPage from './features/mentors/MentorCategoryPage.jsx'
 import MentorSubcategoryPage from './features/mentors/MentorSubcategoryPage.jsx'
 import MentorProfilePage from './features/mentors/MentorProfilePage.jsx'
 import LibraryPage from './features/library/LibraryPage.jsx'
-import History from './pages/History.jsx'
-import Memory from './pages/Memory.jsx'
+import HistoryPage from './features/history/HistoryPage.jsx'
+import MemoryPage from './features/memory/MemoryPage.jsx'
 import Profile from './pages/Profile.jsx'
 import Settings from './pages/Settings.jsx'
 
@@ -36,9 +36,9 @@ export default function App() {
           />
 
           <Route path="/app/library" element={<LibraryPage />} />
+          <Route path="/app/history" element={<HistoryPage />} />
+          <Route path="/app/memory" element={<MemoryPage />} />
 
-          <Route path="/app/history" element={<History />} />
-          <Route path="/app/memory" element={<Memory />} />
           <Route path="/app/profile" element={<Profile />} />
           <Route path="/app/settings" element={<Settings />} />
 
