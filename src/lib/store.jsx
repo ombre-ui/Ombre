@@ -1,5 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
-import { createId, makeConversation, makeMessage, makeProject, makeLibraryItem } from './types.js'
+import {
+  createId,
+  makeConversation,
+  makeMessage,
+  makeProject,
+  makeLibraryItem,
+  makeMemoryItem,
+} from './types.js'
 
 /**
  * MOCK / LOCAL DATA LAYER
@@ -19,10 +26,11 @@ import { createId, makeConversation, makeMessage, makeProject, makeLibraryItem }
  * when the model/master-prompt are ready — the pending -> complete/error
  * message lifecycle it drives is already what the UI expects.
  *
- * Library items are seeded once on first load (see SEED_LIBRARY_ITEMS below)
- * purely so the list/card UI has something to render and the "Sent by You"
- * filter has a genuine empty state to demonstrate. A real backend replaces
- * this seed entirely — nothing here should be treated as real content.
+ * Library and Memory items are seeded once on first load purely so their
+ * list/card UI has something to render. A real backend replaces these seeds
+ * entirely — nothing here should be treated as real content, and Memory in
+ * particular does NOT extract these automatically from conversations yet;
+ * they exist only to demonstrate the view/edit/delete UI foundation.
  */
 
 const STORAGE_KEY = 'ombre-mock-data-v1'
@@ -42,17 +50,28 @@ const SEED_LIBRARY_ITEMS = [
   },
 ]
 
+const SEED_MEMORY_ITEMS = [
+  {
+    label: 'Preference',
+    content: 'Prefers concise, direct answers over long explanations.',
+  },
+  {
+    label: 'Project context',
+    content: 'Working on Ombre, an AI mentorship platform, as the main project right now.',
+  },
+]
+
 function loadInitialState() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      return { conversations: {}, projects: {}, libraryItems: {}, ...parsed }
+      return { conversations: {}, projects: {}, libraryItems: {}, memoryItems: {}, ...parsed }
     }
   } catch {
     // ignore corrupt local data and fall back to empty state
   }
-  return { conversations: {}, projects: {}, libraryItems: {} }
+  return { conversations: {}, projects: {}, libraryItems: {}, memoryItems: {} }
 }
 
 function reducer(state, action) {
@@ -120,6 +139,36 @@ function reducer(state, action) {
       })
       return { ...state, libraryItems: seeded }
     }
+    case 'ADD_MEMORY_ITEM': {
+      const item = action.item
+      return { ...state, memoryItems: { ...state.memoryItems, [item.id]: item } }
+    }
+    case 'UPDATE_MEMORY_ITEM': {
+      const { id, patch } = action
+      const item = state.memoryItems[id]
+      if (!item) return state
+      return {
+        ...state,
+        memoryItems: {
+          ...state.memoryItems,
+          [id]: { ...item, ...patch, updatedAt: new Date().toISOString() },
+        },
+      }
+    }
+    case 'DELETE_MEMORY_ITEM': {
+      const { id } = action
+      const next = { ...state.memoryItems }
+      delete next[id]
+      return { ...state, memoryItems: next }
+    }
+    case 'SEED_MEMORY_ITEMS_ONCE': {
+      if (Object.keys(state.memoryItems).length > 0) return state
+      const seeded = {}
+      action.items.forEach((item) => {
+        seeded[item.id] = item
+      })
+      return { ...state, memoryItems: seeded }
+    }
     default:
       return state
   }
@@ -134,12 +183,16 @@ export function OmbreDataProvider({ children }) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
-  // Seed a couple of Library items once, on first ever load, so the list/card
-  // UI has something to render. See SEED_LIBRARY_ITEMS above.
+  // Seed a couple of Library and Memory items once, on first ever load, so
+  // their list/card UI has something to render. See the SEED_* arrays above.
   useEffect(() => {
     dispatch({
       type: 'SEED_LIBRARY_ITEMS_ONCE',
       items: SEED_LIBRARY_ITEMS.map((item) => makeLibraryItem(item)),
+    })
+    dispatch({
+      type: 'SEED_MEMORY_ITEMS_ONCE',
+      items: SEED_MEMORY_ITEMS.map((item) => makeMemoryItem(item)),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -151,6 +204,11 @@ export function OmbreDataProvider({ children }) {
   }, [])
 
   const getConversation = useCallback((id) => state.conversations[id] ?? null, [state.conversations])
+
+  const listConversations = useCallback(
+    () => Object.values(state.conversations).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
+    [state.conversations]
+  )
 
   // MOCK reply generator. Replace with a real API call — see file header.
   const generateMockReply = useCallback((conversationId, userText, messageId) => {
@@ -244,10 +302,30 @@ export function OmbreDataProvider({ children }) {
     [state.libraryItems]
   )
 
+  const listMemoryItems = useCallback(
+    () => Object.values(state.memoryItems).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
+    [state.memoryItems]
+  )
+
+  const createMemoryItem = useCallback((label, content) => {
+    const item = makeMemoryItem({ label, content })
+    dispatch({ type: 'ADD_MEMORY_ITEM', item })
+    return item.id
+  }, [])
+
+  const updateMemoryItem = useCallback((id, patch) => {
+    dispatch({ type: 'UPDATE_MEMORY_ITEM', id, patch })
+  }, [])
+
+  const deleteMemoryItem = useCallback((id) => {
+    dispatch({ type: 'DELETE_MEMORY_ITEM', id })
+  }, [])
+
   const value = useMemo(
     () => ({
       createConversation,
       getConversation,
+      listConversations,
       sendMessage,
       retryMessage,
       createProject,
@@ -256,10 +334,15 @@ export function OmbreDataProvider({ children }) {
       listProjects,
       listConversationsForProject,
       listLibraryItems,
+      listMemoryItems,
+      createMemoryItem,
+      updateMemoryItem,
+      deleteMemoryItem,
     }),
     [
       createConversation,
       getConversation,
+      listConversations,
       sendMessage,
       retryMessage,
       createProject,
@@ -268,6 +351,10 @@ export function OmbreDataProvider({ children }) {
       listProjects,
       listConversationsForProject,
       listLibraryItems,
+      listMemoryItems,
+      createMemoryItem,
+      updateMemoryItem,
+      deleteMemoryItem,
     ]
   )
 
