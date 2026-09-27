@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useOmbreData } from '../../lib/store.jsx'
+import SettingsToggle from '../settings/SettingsToggle.jsx'
 import './profile.css'
 
 function initialsFor(name, email) {
@@ -13,7 +14,14 @@ function initialsFor(name, email) {
 }
 
 export default function ProfilePage() {
-  const { getProfile, updateProfile } = useOmbreData()
+  const {
+    getProfile,
+    updateProfile,
+    listConversations,
+    listMemoryItems,
+    getSettings,
+    updateSettings,
+  } = useOmbreData()
   const profile = getProfile()
   const [isEditing, setIsEditing] = useState(false)
   const [name, setName] = useState(profile?.name ?? '')
@@ -21,6 +29,11 @@ export default function ProfilePage() {
   const [toast, setToast] = useState(null)
 
   if (!profile) return null
+
+  const settings = getSettings()
+  const conversations = listConversations()
+  const mentorsUsedCount = new Set(conversations.filter((c) => c.mentorId).map((c) => c.mentorId)).size
+  const memoryCount = listMemoryItems().length
 
   function handleSave() {
     updateProfile({ name: name.trim(), email: email.trim() })
@@ -48,7 +61,7 @@ export default function ProfilePage() {
     <div className="profile-page motion-reveal">
       <header className="profile-header">
         <h1 className="text-heading-lg">Profile</h1>
-        <p className="text-body text-secondary">How Ombre identifies you — nothing here is synced anywhere yet.</p>
+        <p className="text-body text-secondary">How Ombre identifies you \u2014 nothing here is synced anywhere yet.</p>
       </header>
 
       <section className="profile-card">
@@ -112,14 +125,50 @@ export default function ProfilePage() {
       </section>
 
       <section className="profile-section">
+        <h2 className="text-heading-sm">Usage</h2>
+        <p className="text-body-sm text-secondary settings-section-intro">
+          There\u2019s no plan or billing system yet \u2014 this is a local snapshot only.
+        </p>
+        <div className="profile-stat-row">
+          <span className="text-body-sm text-secondary">Plan</span>
+          <span className="text-body-sm">Preview build</span>
+        </div>
+        <div className="profile-stat-row">
+          <span className="text-body-sm text-secondary">Conversations</span>
+          <span className="text-body-sm">{conversations.length}</span>
+        </div>
+        <div className="profile-stat-row">
+          <span className="text-body-sm text-secondary">Mentors used</span>
+          <span className="text-body-sm">{mentorsUsedCount}</span>
+        </div>
+      </section>
+
+      <section className="profile-section">
         <h2 className="text-heading-sm">Personalization</h2>
         <p className="text-body-sm text-secondary">
           Response style and how Ombre personalizes its answers live in{' '}
           <a href="/app/settings#ai" className="profile-link">
-            Settings → AI &amp; Personalization
+            Settings \u2192 AI &amp; Personalization
           </a>
           .
         </p>
+      </section>
+
+      <section className="profile-section">
+        <h2 className="text-heading-sm">Memory</h2>
+        <p className="text-body-sm text-secondary">
+          {memoryCount === 0 ? 'Nothing remembered yet.' : `${memoryCount} item${memoryCount === 1 ? '' : 's'} remembered.`}{' '}
+          <a href="/app/memory" className="profile-link">
+            View Memory
+          </a>
+          .
+        </p>
+        <SettingsToggle
+          label="Remember context across conversations"
+          description="Allow Ombre to use Memory when responding. Full controls are in Settings \u2192 Privacy."
+          checked={settings.privacy.rememberContext}
+          onChange={(v) => updateSettings({ privacy: { ...settings.privacy, rememberContext: v } })}
+        />
       </section>
 
       <section className="profile-section profile-section-danger">
