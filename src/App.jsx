@@ -11,8 +11,8 @@ import MentorProfilePage from './features/mentors/MentorProfilePage.jsx'
 import LibraryPage from './features/library/LibraryPage.jsx'
 import HistoryPage from './features/history/HistoryPage.jsx'
 import MemoryPage from './features/memory/MemoryPage.jsx'
-import Profile from './pages/Profile.jsx'
-import Settings from './pages/Settings.jsx'
+import ProfilePage from './features/profile/ProfilePage.jsx'
+import SettingsPage from './features/settings/SettingsPage.jsx'
 
 export default function App() {
   return (
@@ -39,8 +39,8 @@ export default function App() {
           <Route path="/app/history" element={<HistoryPage />} />
           <Route path="/app/memory" element={<MemoryPage />} />
 
-          <Route path="/app/profile" element={<Profile />} />
-          <Route path="/app/settings" element={<Settings />} />
+          <Route path="/app/profile" element={<ProfilePage />} />
+          <Route path="/app/settings" element={<SettingsPage />} />
 
           <Route path="*" element={<Navigate to="/app/general" replace />} />
         </Routes>
