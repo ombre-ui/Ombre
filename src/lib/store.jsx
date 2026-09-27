@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from 'react'
 import {
   createId,
   makeConversation,
@@ -6,6 +6,7 @@ import {
   makeProject,
   makeLibraryItem,
   makeMemoryItem,
+  makeProfile,
 } from './types.js'
 
 /**
@@ -31,6 +32,12 @@ import {
  * entirely — nothing here should be treated as real content, and Memory in
  * particular does NOT extract these automatically from conversations yet;
  * they exist only to demonstrate the view/edit/delete UI foundation.
+ *
+ * profile/settings: there is no authentication yet, so `profile` is not a
+ * signed-in account — it's a single local record a person can fill in
+ * (name/email), and `settings` is a set of local UI preferences. Both are
+ * genuinely interactive (they persist to localStorage like everything else
+ * here) but neither is backed by a real account or server.
  */
 
 const STORAGE_KEY = 'ombre-mock-data-v1'
@@ -61,17 +68,48 @@ const SEED_MEMORY_ITEMS = [
   },
 ]
 
+const DEFAULT_SETTINGS = {
+  notifications: {
+    email: true,
+    inApp: true,
+  },
+  privacy: {
+    saveHistory: true,
+    rememberContext: true,
+  },
+  ai: {
+    responseStyle: 'balanced', // 'concise' | 'balanced' | 'detailed'
+    useNameInResponses: false,
+    suggestMentors: true,
+  },
+}
+
 function loadInitialState() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      return { conversations: {}, projects: {}, libraryItems: {}, memoryItems: {}, ...parsed }
+      return {
+        conversations: {},
+        projects: {},
+        libraryItems: {},
+        memoryItems: {},
+        profile: null,
+        settings: DEFAULT_SETTINGS,
+        ...parsed,
+      }
     }
   } catch {
     // ignore corrupt local data and fall back to empty state
   }
-  return { conversations: {}, projects: {}, libraryItems: {}, memoryItems: {} }
+  return {
+    conversations: {},
+    projects: {},
+    libraryItems: {},
+    memoryItems: {},
+    profile: null,
+    settings: DEFAULT_SETTINGS,
+  }
 }
 
 function reducer(state, action) {
@@ -105,6 +143,9 @@ function reducer(state, action) {
           [conversationId]: { ...conversation, messages, updatedAt: new Date().toISOString() },
         },
       }
+    }
+    case 'CLEAR_CONVERSATIONS': {
+      return { ...state, conversations: {} }
     }
     case 'CREATE_PROJECT': {
       const project = action.project
@@ -161,6 +202,9 @@ function reducer(state, action) {
       delete next[id]
       return { ...state, memoryItems: next }
     }
+    case 'CLEAR_MEMORY': {
+      return { ...state, memoryItems: {} }
+    }
     case 'SEED_MEMORY_ITEMS_ONCE': {
       if (Object.keys(state.memoryItems).length > 0) return state
       const seeded = {}
@@ -168,6 +212,16 @@ function reducer(state, action) {
         seeded[item.id] = item
       })
       return { ...state, memoryItems: seeded }
+    }
+    case 'SEED_PROFILE_ONCE': {
+      if (state.profile) return state
+      return { ...state, profile: action.profile }
+    }
+    case 'UPDATE_PROFILE': {
+      return { ...state, profile: { ...state.profile, ...action.patch } }
+    }
+    case 'UPDATE_SETTINGS': {
+      return { ...state, settings: { ...state.settings, ...action.patch } }
     }
     default:
       return state
@@ -179,12 +233,25 @@ const OmbreDataContext = createContext(null)
 export function OmbreDataProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitialState)
 
+  // Theme lives here (rather than in AppShell) so both the sidebar and the
+  // Settings page can read and change the same value.
+  const [theme, setTheme] = useState(() => {
+    const stored = window.localStorage.getItem('ombre-theme')
+    if (stored) return stored
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    window.localStorage.setItem('ombre-theme', theme)
+  }, [theme])
+  const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), [])
+
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
-  // Seed a couple of Library and Memory items once, on first ever load, so
-  // their list/card UI has something to render. See the SEED_* arrays above.
+  // Seed Library/Memory items and the local profile once, on first ever
+  // load, so their UI has something to render. See the SEED_* data above.
   useEffect(() => {
     dispatch({
       type: 'SEED_LIBRARY_ITEMS_ONCE',
@@ -194,6 +261,7 @@ export function OmbreDataProvider({ children }) {
       type: 'SEED_MEMORY_ITEMS_ONCE',
       items: SEED_MEMORY_ITEMS.map((item) => makeMemoryItem(item)),
     })
+    dispatch({ type: 'SEED_PROFILE_ONCE', profile: makeProfile() })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -209,6 +277,10 @@ export function OmbreDataProvider({ children }) {
     () => Object.values(state.conversations).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
     [state.conversations]
   )
+
+  const clearAllConversations = useCallback(() => {
+    dispatch({ type: 'CLEAR_CONVERSATIONS' })
+  }, [])
 
   // MOCK reply generator. Replace with a real API call — see file header.
   const generateMockReply = useCallback((conversationId, userText, messageId) => {
@@ -321,11 +393,30 @@ export function OmbreDataProvider({ children }) {
     dispatch({ type: 'DELETE_MEMORY_ITEM', id })
   }, [])
 
+  const clearAllMemory = useCallback(() => {
+    dispatch({ type: 'CLEAR_MEMORY' })
+  }, [])
+
+  const getProfile = useCallback(() => state.profile, [state.profile])
+
+  const updateProfile = useCallback((patch) => {
+    dispatch({ type: 'UPDATE_PROFILE', patch })
+  }, [])
+
+  const getSettings = useCallback(() => state.settings, [state.settings])
+
+  const updateSettings = useCallback((patch) => {
+    dispatch({ type: 'UPDATE_SETTINGS', patch })
+  }, [])
+
   const value = useMemo(
     () => ({
+      theme,
+      toggleTheme,
       createConversation,
       getConversation,
       listConversations,
+      clearAllConversations,
       sendMessage,
       retryMessage,
       createProject,
@@ -338,11 +429,19 @@ export function OmbreDataProvider({ children }) {
       createMemoryItem,
       updateMemoryItem,
       deleteMemoryItem,
+      clearAllMemory,
+      getProfile,
+      updateProfile,
+      getSettings,
+      updateSettings,
     }),
     [
+      theme,
+      toggleTheme,
       createConversation,
       getConversation,
       listConversations,
+      clearAllConversations,
       sendMessage,
       retryMessage,
       createProject,
@@ -355,6 +454,11 @@ export function OmbreDataProvider({ children }) {
       createMemoryItem,
       updateMemoryItem,
       deleteMemoryItem,
+      clearAllMemory,
+      getProfile,
+      updateProfile,
+      getSettings,
+      updateSettings,
     ]
   )
 
