@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar.jsx'
+import { useOmbreData } from '../lib/store.jsx'
 import './AppShell.css'
 
 function useIsMobile(breakpoint = 767) {
@@ -15,22 +16,11 @@ function useIsMobile(breakpoint = 767) {
   return isMobile
 }
 
-function useTheme() {
-  const [theme, setTheme] = useState(() => {
-    const stored = window.localStorage.getItem('ombre-theme')
-    if (stored) return stored
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  })
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    window.localStorage.setItem('ombre-theme', theme)
-  }, [theme])
-  return [theme, () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))]
-}
-
 export default function AppShell({ children }) {
   const isMobile = useIsMobile()
-  const [theme, toggleTheme] = useTheme()
+  // Theme now lives in the shared store (src/lib/store.jsx) so the Settings
+  // page can read and change the same value the sidebar toggle controls.
+  const { theme, toggleTheme } = useOmbreData()
 
   const [collapsed, setCollapsed] = useState(() => {
     const stored = window.localStorage.getItem('ombre-sidebar-collapsed')
