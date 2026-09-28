@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useOmbreData } from '../../lib/store.jsx'
 import SettingsToggle from './SettingsToggle.jsx'
 import SettingsSegmented from './SettingsSegmented.jsx'
@@ -14,8 +15,8 @@ const SECTIONS = [
   { id: 'about', label: 'About' },
 ]
 
-function scrollToSection(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+function scrollToSection(id, behavior = 'smooth') {
+  document.getElementById(id)?.scrollIntoView({ behavior, block: 'start' })
 }
 
 export default function SettingsPage() {
@@ -30,11 +31,18 @@ export default function SettingsPage() {
     listMemoryItems,
     clearAllMemory,
   } = useOmbreData()
+  const { hash } = useLocation()
 
   const settings = getSettings()
   const profile = getProfile()
   const memoryCount = listMemoryItems().length
   const [toast, setToast] = useState(null)
+
+  // Deep links like /app/settings#ai (used from Profile) should land on that
+  // section. Router navigation doesn't scroll to hashes by itself.
+  useEffect(() => {
+    if (hash) scrollToSection(hash.slice(1), 'auto')
+  }, [hash])
 
   function patchSection(section, patch) {
     updateSettings({ [section]: { ...settings[section], ...patch } })
@@ -59,7 +67,7 @@ export default function SettingsPage() {
   }
 
   function handleSignOut() {
-    setToast('There\u2019s no account signed in yet \u2014 authentication isn\u2019t connected.')
+    setToast('There’s no account signed in yet — authentication isn’t connected.')
     window.setTimeout(() => setToast(null), 2400)
   }
 
@@ -151,10 +159,12 @@ export default function SettingsPage() {
       <section id="memory" className="settings-section">
         <h2 className="text-heading-sm">Memory</h2>
         <p className="text-body-sm text-secondary settings-section-intro">
-          {memoryCount === 0 ? 'Nothing remembered yet.' : `${memoryCount} item${memoryCount === 1 ? '' : 's'} remembered.`}{' '}
-          <a href="/app/memory" className="settings-link-active">
+          {memoryCount === 0
+            ? 'Nothing remembered yet.'
+            : `${memoryCount} item${memoryCount === 1 ? '' : 's'} remembered.`}{' '}
+          <Link to="/app/memory" className="settings-link-active">
             View Memory
-          </a>
+          </Link>
           . Ombre doesn't extract memory automatically yet — everything there was added by hand.
         </p>
 
@@ -212,7 +222,13 @@ export default function SettingsPage() {
               {profile.name || 'No name set'} · {profile.email || 'No email set'}
             </>
           ) : (
-            'No account information set yet — add it from Profile.'
+            <>
+              No account information set yet — add it from{' '}
+              <Link to="/app/profile" className="settings-link-active">
+                Profile
+              </Link>
+              .
+            </>
           )}
         </p>
 
