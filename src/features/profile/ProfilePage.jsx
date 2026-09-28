@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useOmbreData } from '../../lib/store.jsx'
 import SettingsToggle from '../settings/SettingsToggle.jsx'
 import './profile.css'
@@ -47,7 +48,7 @@ export default function ProfilePage() {
   }
 
   function handleSignOut() {
-    setToast('There\u2019s no account signed in yet \u2014 authentication isn\u2019t connected.')
+    setToast('There’s no account signed in yet — authentication isn’t connected.')
     window.setTimeout(() => setToast(null), 2400)
   }
 
@@ -61,7 +62,7 @@ export default function ProfilePage() {
     <div className="profile-page motion-reveal">
       <header className="profile-header">
         <h1 className="text-heading-lg">Profile</h1>
-        <p className="text-body text-secondary">How Ombre identifies you \u2014 nothing here is synced anywhere yet.</p>
+        <p className="text-body text-secondary">How Ombre identifies you — nothing here is synced anywhere yet.</p>
       </header>
 
       <section className="profile-card">
@@ -126,8 +127,8 @@ export default function ProfilePage() {
 
       <section className="profile-section">
         <h2 className="text-heading-sm">Usage</h2>
-        <p className="text-body-sm text-secondary settings-section-intro">
-          There\u2019s no plan or billing system yet \u2014 this is a local snapshot only.
+        <p className="text-body-sm text-secondary profile-section-intro">
+          There’s no plan or billing system yet — this is a local snapshot only.
         </p>
         <div className="profile-stat-row">
           <span className="text-body-sm text-secondary">Plan</span>
@@ -147,9 +148,9 @@ export default function ProfilePage() {
         <h2 className="text-heading-sm">Personalization</h2>
         <p className="text-body-sm text-secondary">
           Response style and how Ombre personalizes its answers live in{' '}
-          <a href="/app/settings#ai" className="profile-link">
-            Settings \u2192 AI &amp; Personalization
-          </a>
+          <Link to="/app/settings#ai" className="profile-link">
+            Settings → AI &amp; Personalization
+          </Link>
           .
         </p>
       </section>
@@ -157,15 +158,17 @@ export default function ProfilePage() {
       <section className="profile-section">
         <h2 className="text-heading-sm">Memory</h2>
         <p className="text-body-sm text-secondary">
-          {memoryCount === 0 ? 'Nothing remembered yet.' : `${memoryCount} item${memoryCount === 1 ? '' : 's'} remembered.`}{' '}
-          <a href="/app/memory" className="profile-link">
+          {memoryCount === 0
+            ? 'Nothing remembered yet.'
+            : `${memoryCount} item${memoryCount === 1 ? '' : 's'} remembered.`}{' '}
+          <Link to="/app/memory" className="profile-link">
             View Memory
-          </a>
+          </Link>
           .
         </p>
         <SettingsToggle
           label="Remember context across conversations"
-          description="Allow Ombre to use Memory when responding. Full controls are in Settings \u2192 Privacy."
+          description="Allow Ombre to use Memory when responding. Full controls are in Settings → Memory."
           checked={settings.privacy.rememberContext}
           onChange={(v) => updateSettings({ privacy: { ...settings.privacy, rememberContext: v } })}
         />
