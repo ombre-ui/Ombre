@@ -7,6 +7,11 @@ import './history.css'
 
 const BUCKET_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older']
 
+const STATUS_LABEL = {
+  pending: 'Ombre is still responding',
+  error: 'The last response failed',
+}
+
 function bucketFor(dateStr) {
   const d = new Date(dateStr)
   const now = new Date()
@@ -30,16 +35,24 @@ function formatMeta(conversation) {
 }
 
 export default function HistoryPage() {
+  // History reads the same Conversation records General AI and mentors write.
+  // listConversations() is the integration point to swap for real history
+  // from Supabase later; nothing on this page defines its own conversation model.
   const { listConversations, getProject } = useOmbreData()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
 
-  const conversations = listConversations()
+  // A conversation with no messages yet (e.g. "Start conversation" on a mentor
+  // profile, then leaving) has nothing to return to, so it isn't listed.
+  const conversations = listConversations().filter((c) => c.messages.length > 0)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return conversations
-    return conversations.filter((c) => c.title.toLowerCase().includes(q))
+    return conversations.filter((c) => {
+      const mentorName = c.mentorId ? getMentorWithPath(c.mentorId)?.mentor.name ?? '' : 'General AI'
+      return c.title.toLowerCase().includes(q) || mentorName.toLowerCase().includes(q)
+    })
   }, [conversations, query])
 
   const grouped = useMemo(() => {
@@ -63,10 +76,10 @@ export default function HistoryPage() {
         <Search size={16} strokeWidth={1.75} aria-hidden="true" />
         <input
           type="text"
-          placeholder="Search conversations"
+          placeholder="Search by title or mentor"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search conversations"
+          aria-label="Search conversations by title or mentor"
         />
       </div>
 
@@ -90,6 +103,8 @@ export default function HistoryPage() {
                 .map((c) => {
                   const mentorContext = c.mentorId ? getMentorWithPath(c.mentorId) : null
                   const project = c.projectId ? getProject(c.projectId) : null
+                  const lastStatus = c.messages[c.messages.length - 1]?.status
+                  const statusLabel = STATUS_LABEL[lastStatus]
                   return (
                     <li key={c.id}>
                       <button
@@ -98,19 +113,32 @@ export default function HistoryPage() {
                         onClick={() => navigate(`/app/general/${c.id}`)}
                       >
                         <span className="history-item-main">
-                          <span className="text-body history-item-title">{c.title}</span>
+                          <span className="history-item-title-row">
+                            <span className="text-body history-item-title">{c.title}</span>
+                            {statusLabel && (
+                              <span
+                                className={`history-status is-${lastStatus}`}
+                                role="img"
+                                aria-label={statusLabel}
+                                title={statusLabel}
+                              />
+                            )}
+                          </span>
                           <span className="text-meta">{formatMeta(c)}</span>
                         </span>
-                        {(mentorContext || project) && (
-                          <span className="history-item-tags">
-                            {mentorContext && (
-                              <span className="history-tag history-tag-mentor">
-                                {mentorContext.mentor.name}
-                              </span>
-                            )}
-                            {project && <span className="history-tag">{project.name}</span>}
-                          </span>
-                        )}
+                        <span className="history-item-tags">
+                          {mentorContext ? (
+                            <span
+                              className="history-tag history-tag-mentor"
+                              title={`${mentorContext.category.name} · ${mentorContext.subcategory.name}`}
+                            >
+                              {mentorContext.mentor.name}
+                            </span>
+                          ) : (
+                            <span className="history-tag history-tag-general">General AI</span>
+                          )}
+                          {project && <span className="history-tag">{project.name}</span>}
+                        </span>
                       </button>
                     </li>
                   )
