@@ -70,8 +70,13 @@
 }
 .history-status.is-pending { background: var(--accent); }
 .history-status.is-error { background: var(--action-primary); }
+
+@keyframes ombre-history-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
 @media (prefers-reduced-motion: no-preference) {
-  .history-status.is-pending { animation: ombre-pending-pulse 1.1s var(--ease-ombre-in-out) infinite; }
+  .history-status.is-pending { animation: ombre-history-pulse 1.1s var(--ease-ombre-in-out) infinite; }
 }
 
 .history-item-tags { display: flex; gap: var(--space-1); flex-shrink: 0; }
