@@ -51,7 +51,7 @@ Rules for schema changes:
 
 - Every change is a new file in `supabase/migrations/`. Never edit a migration that has already been applied.
 - Migrations run as `postgres`. Default privileges for that role grant nothing to API roles, so every new object needs explicit grants in its own migration.
-- Only `public` is exposed through the Data API.
+- On the hosted project the Data API exposes the `public` and `graphql_public` schemas (per the recorded dashboard audit). The `private` schema is not exposed and must never be added. The local `supabase/config.toml` mirrors this.
 
 ## Local Supabase workflow
 
