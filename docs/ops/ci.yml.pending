@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Action versions are pinned by tag for now; pin by commit SHA during A8 hardening.
+
+jobs:
+  build:
+    name: Install, build, test, audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require package-lock.json
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "package-lock.json is missing. Run 'npm install' locally and commit the lockfile."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # No test framework is installed yet; this runs a "test" script only if one exists.
+      - name: Tests (if defined)
+        run: npm test --if-present
+
+      - name: Dependency audit (production dependencies, high severity and above)
+        run: npm audit --omit=dev --audit-level=high
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      - name: Scan history and working tree
+        run: ./gitleaks detect --source . --redact --verbose --exit-code 1
+
+  supabase:
+    name: Supabase migration replay and type drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check migration file naming
+        run: |
+          bad=$(ls supabase/migrations | grep -Ev '^[0-9]{14}_[a-z0-9_]+\.sql$' || true)
+          if [ -n "$bad" ]; then
+            echo "Unexpected migration file name(s): $bad"
+            exit 1
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local stack (applies supabase/migrations in order)
+        run: supabase start
+
+      - name: Reset database from migrations only
+        run: supabase db reset
+
+      # Advisory for now: compares CLI-generated types from the replayed local schema with the
+      # committed types (generated from the live project). The PostgrestVersion line is ignored
+      # because it reflects the server version. Make this blocking in A8 once a green baseline exists.
+      - name: Generated types match committed types
+        continue-on-error: true
+        run: |
+          supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.ts"
+          diff -u <(grep -v PostgrestVersion supabase/types/database.types.ts) <(grep -v PostgrestVersion "$RUNNER_TEMP/database.types.ts")
