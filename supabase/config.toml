@@ -9,8 +9,9 @@ project_id = "ombre"
 
 [api]
 enabled = true
-# Only `public` is exposed through the Data API. The `private` schema must never be added here.
-schemas = ["public"]
+# Mirrors the hosted project's Data API exposure: `public` and `graphql_public`.
+# The `private` schema is not exposed and must never be added here.
+schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
