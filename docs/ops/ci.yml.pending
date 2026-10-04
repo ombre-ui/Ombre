@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 # Action versions are pinned by tag for now; pin by commit SHA during A8 hardening.
+# The three jobs are independent. The Supabase job does not need package-lock.json.
 
 jobs:
   build:
@@ -65,11 +66,17 @@ jobs:
         run: ./gitleaks detect --source . --redact --verbose --exit-code 1
 
   supabase:
-    name: Supabase migration replay and type drift
+    name: Supabase migration replay, schema fingerprint, type drift
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Runner resources
+        run: |
+          nproc
+          free -h
+          df -h /
 
       - name: Check migration file naming
         run: |
@@ -83,17 +90,107 @@ jobs:
         with:
           version: latest
 
-      - name: Start local stack (applies supabase/migrations in order)
-        run: supabase start
+      - name: Supabase CLI version
+        run: supabase --version
 
-      - name: Reset database from migrations only
-        run: supabase db reset
+      # The local stack's own service initialization (realtime, storage, auth) can fail on small
+      # machines before any Ombre migration runs. Attempts 1 and 2 skip services this job does not
+      # need; attempt 3 starts the default stack. Everything is bounded to three attempts.
+      - name: Start local stack (bounded retry)
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::supabase start, attempt ${attempt}"
+            if [ "$attempt" -lt 3 ]; then
+              args="-x studio,imgproxy,edge-runtime,logflare,vector"
+            else
+              args=""
+            fi
+            if supabase start --debug $args > "$RUNNER_TEMP/sb-start-${attempt}.log" 2>&1; then
+              echo "supabase start succeeded on attempt ${attempt}"
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "attempt ${attempt} failed; last log lines:"
+            tail -n 40 "$RUNNER_TEMP/sb-start-${attempt}.log"
+            echo "::endgroup::"
+            supabase stop --no-backup || true
+            sleep 15
+          done
+          echo "supabase start failed after 3 attempts"
+          exit 1
 
-      # Advisory for now: compares CLI-generated types from the replayed local schema with the
-      # committed types (generated from the live project). The PostgrestVersion line is ignored
-      # because it reflects the server version. Make this blocking in A8 once a green baseline exists.
+      # A migration SQL error (SQLSTATE) is a real failure and is never retried.
+      # Only infrastructure failures before or around migrations are retried.
+      - name: Reset database from migrations only (bounded retry)
+        run: |
+          for attempt in 1 2 3; do
+            log="$RUNNER_TEMP/sb-reset-${attempt}.log"
+            echo "::group::supabase db reset, attempt ${attempt}"
+            if supabase db reset > "$log" 2>&1; then
+              cat "$log"
+              echo "::endgroup::"
+              exit 0
+            fi
+            tail -n 60 "$log"
+            echo "::endgroup::"
+            if grep -q 'SQLSTATE' "$log"; then
+              echo "Migration SQL error detected. Not retrying."
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "supabase db reset failed after 3 attempts (no migration SQL error detected)"
+          exit 1
+
+      - name: Verify applied migration history matches repo files
+        run: |
+          expected=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]{14})_(.*)\.sql$/\1 \2/' | sort)
+          actual=$(docker exec supabase_db_ombre psql -U postgres -At -c "select version||' '||name from supabase_migrations.schema_migrations order by version")
+          echo "expected (from repo files):"; echo "$expected"
+          echo "actual (local database):"; echo "$actual"
+          if [ "$expected" != "$actual" ]; then
+            echo "Migration history mismatch"
+            exit 1
+          fi
+
+      # A1 baseline: expected values were computed read-only against the live project after
+      # migration 4. When a later migration changes the schema, regenerate the expected file
+      # (see docs/ops/schema-fingerprint.sql).
+      - name: Schema fingerprint matches the live baseline
+        run: |
+          docker exec -i supabase_db_ombre psql -U postgres -At -f - < docs/ops/schema-fingerprint.sql > "$RUNNER_TEMP/fingerprint.actual"
+          cat "$RUNNER_TEMP/fingerprint.actual"
+          if ! diff -u docs/ops/schema-fingerprint.expected "$RUNNER_TEMP/fingerprint.actual"; then
+            echo "Schema fingerprint differs from the live baseline. The first differing section names the object group."
+            exit 1
+          fi
+          echo "fingerprint matches"
+
       - name: Generated types match committed types
-        continue-on-error: true
         run: |
           supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.ts"
-          diff -u <(grep -v PostgrestVersion supabase/types/database.types.ts) <(grep -v PostgrestVersion "$RUNNER_TEMP/database.types.ts")
+          if ! diff -u <(grep -v PostgrestVersion supabase/types/database.types.ts) <(grep -v PostgrestVersion "$RUNNER_TEMP/database.types.ts"); then
+            echo "Generated types differ from the committed file. Investigate before overwriting it."
+            exit 1
+          fi
+          echo "types match (PostgrestVersion line ignored)"
+
+      - name: Container diagnostics
+        if: failure()
+        run: |
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}' || true
+          for c in $(docker ps -a --format '{{.Names}}' | grep -i supabase || true); do
+            echo "::group::logs ${c}"
+            docker logs --tail 150 "$c" 2>&1 || true
+            echo "::endgroup::"
+          done
+          free -h || true
+
+      - name: Upload Supabase logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-logs
+          path: ${{ runner.temp }}/sb-*.log
+          if-no-files-found: ignore
+          retention-days: 7

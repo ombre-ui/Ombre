@@ -40,6 +40,8 @@ supabase/
   functions/user-context/  Edge Function source as deployed (read-only user context; unused by the frontend)
   types/database.types.ts  Generated database types (server-side use only)
 docs/ops/ci.yml.pending CI workflow staged for installation (see Continuous integration)
+docs/ops/schema-fingerprint.sql, schema-fingerprint.expected
+                        Schema baseline check used by CI (query and expected output)
 .env.example            Placeholder environment variables (server-only; no real values)
 ```
 
@@ -55,7 +57,7 @@ Rules for schema changes:
 
 ## Local Supabase workflow
 
-Requires Docker and the [Supabase CLI](https://supabase.com/docs/guides/local-development).
+Requires Docker and the [Supabase CLI](https://supabase.com/docs/guides/local-development). The CLI reference recommends at least 7 GB of RAM to start all services.
 
 ```bash
 supabase start        # starts the local stack and applies supabase/migrations
@@ -71,11 +73,18 @@ The committed types were generated from the hosted project. CLI output may diffe
 
 The workflow is staged at `docs/ops/ci.yml.pending` and is **not active yet**: the automation that prepared this change cannot write to `.github/workflows/`. To enable it, move the file to `.github/workflows/ci.yml` and commit it.
 
-Once active it runs on pull requests and pushes to `main`:
+Once active it runs on pull requests and pushes to `main` as three independent jobs:
 
 - **Install, build, test, audit:** `npm ci`, `npm run build`, `npm test --if-present`, and `npm audit` for production dependencies (high severity and above). Requires a committed `package-lock.json`, which does not exist yet.
 - **Secret scan:** gitleaks over the full git history.
-- **Supabase:** starts the local stack, replays all migrations with `supabase db reset`, and compares generated types with the committed file. The type comparison is advisory for now.
+- **Supabase:**
+  - starts the local stack with up to three bounded attempts (the first two skip services the job does not need);
+  - replays all migrations with `supabase db reset`, where a migration SQL error fails immediately and is never retried;
+  - checks that the applied migration history matches the files in `supabase/migrations`;
+  - compares a schema fingerprint against the live baseline (`docs/ops/schema-fingerprint.sql` and `docs/ops/schema-fingerprint.expected`);
+  - compares generated types with the committed file.
+
+  All of these checks block. The fingerprint is an A1 baseline: when a later migration changes the schema, update the expected file as described in the header of the SQL file.
 
 There is no test framework yet.
 
