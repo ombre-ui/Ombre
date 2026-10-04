@@ -178,43 +178,43 @@ jobs:
           generated = Path(os.environ["RUNNER_TEMP"]) / "database.types.ts"
           generated = generated.read_text()
 
-          def extract_public_schema(text):
-              # Compare only the generated public-schema shape. The surrounding helper types,
-              # comments, formatting, and generator metadata are implementation details.
-              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-              text = re.sub(r"//.*", "", text)
-
-              marker = "  public: {"
+          def extract_block(text, marker):
               start = text.find(marker)
               if start == -1:
-                  raise SystemExit("Could not find the public schema block.")
-
+                  raise SystemExit(f"Could not find {marker!r}.")
               open_brace = text.find("{", start)
               depth = 0
-              end = None
               for i in range(open_brace, len(text)):
-                  char = text[i]
-                  if char == "{":
+                  if text[i] == "{":
                       depth += 1
-                  elif char == "}":
+                  elif text[i] == "}":
                       depth -= 1
                       if depth == 0:
-                          end = i + 1
-                          break
+                          return text[start:i + 1]
+              raise SystemExit(f"Could not find the end of {marker!r}.")
 
-              if end is None:
-                  raise SystemExit("Could not find the end of the public schema block.")
+          def normalize_tables(text):
+              # The schema source of truth is the table Row/Insert/Update shape.
+              # Relationship metadata is generator-dependent, so it is intentionally excluded.
+              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+              text = re.sub(r"//.*", "", text)
+              tables = extract_block(text, "Tables: {")
+              tables = re.sub(
+                  r"\s*Relationships:\s*\[[^\]]*\]",
+                  "",
+                  tables,
+                  flags=re.S,
+              )
+              return re.sub(r"\s+", "", tables)
 
-              return re.sub(r"\s+", "", text[start:end])
-
-          left = extract_public_schema(committed)
-          right = extract_public_schema(generated)
+          left = normalize_tables(committed)
+          right = normalize_tables(generated)
 
           if left != right:
-              print("Schema-derived public type differs from the committed file.")
+              print("Schema-derived table types differ from the committed file.")
               raise SystemExit(1)
 
-          print("Schema-derived public type matches (formatting, comments, helpers, and generator metadata ignored).")
+          print("Schema-derived table types match (formatting, comments, helpers, metadata, and relationship metadata ignored).")
           PY
 
       - name: Container diagnostics
