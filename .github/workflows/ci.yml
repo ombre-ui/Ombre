@@ -172,9 +172,11 @@ jobs:
           python3 - <<'PY'
           import re
           from pathlib import Path
+          import os
 
           committed = Path("supabase/types/database.types.ts").read_text()
-          generated = Path("$RUNNER_TEMP/database.types.ts").read_text()
+          generated = Path(os.environ["RUNNER_TEMP"]) / "database.types.ts"
+          generated = generated.read_text()
 
           def normalize_database_block(text):
               # Remove comments before brace matching so braces in comments cannot affect parsing.
