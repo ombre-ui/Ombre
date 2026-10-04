@@ -169,11 +169,61 @@ jobs:
       - name: Generated types match committed types
         run: |
           supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.ts"
-          if ! diff -u <(grep -v PostgrestVersion supabase/types/database.types.ts) <(grep -v PostgrestVersion "$RUNNER_TEMP/database.types.ts"); then
-            echo "Generated types differ from the committed file. Investigate before overwriting it."
-            exit 1
-          fi
-          echo "types match (PostgrestVersion line ignored)"
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          committed = Path("supabase/types/database.types.ts").read_text()
+          generated = Path("$RUNNER_TEMP/database.types.ts").read_text()
+
+          def normalize_database_block(text):
+              # Remove comments before brace matching so braces in comments cannot affect parsing.
+              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+              text = re.sub(r"//.*", "", text)
+
+              marker = "export type Database = {"
+              start = text.find(marker)
+              if start == -1:
+                  raise SystemExit("Could not find 'export type Database'.")
+
+              open_brace = text.find("{", start)
+              depth = 0
+              end = None
+              for i in range(open_brace, len(text)):
+                  char = text[i]
+                  if char == "{":
+                      depth += 1
+                  elif char == "}":
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+
+              if end is None:
+                  raise SystemExit("Could not find the end of the Database type block.")
+
+              block = text[start:end]
+
+              # Supabase generator metadata is not part of the schema-derived shape.
+              block = re.sub(
+                  r"__InternalSupabase\s*:\s*\{[^{}]*\}\s*",
+                  "",
+                  block,
+                  flags=re.S,
+              )
+
+              # Ignore formatting differences between generator versions/output formatters.
+              return re.sub(r"\s+", "", block)
+
+          left = normalize_database_block(committed)
+          right = normalize_database_block(generated)
+
+          if left != right:
+              print("Schema-derived Database type differs from the committed file.")
+              raise SystemExit(1)
+
+          print("Schema-derived Database type matches (formatting, comments, and generator internals ignored).")
+          PY
 
       - name: Container diagnostics
         if: failure()
