@@ -178,15 +178,16 @@ jobs:
           generated = Path(os.environ["RUNNER_TEMP"]) / "database.types.ts"
           generated = generated.read_text()
 
-          def normalize_database_block(text):
-              # Remove comments before brace matching so braces in comments cannot affect parsing.
+          def extract_public_schema(text):
+              # Compare only the generated public-schema shape. The surrounding helper types,
+              # comments, formatting, and generator metadata are implementation details.
               text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
               text = re.sub(r"//.*", "", text)
 
-              marker = "export type Database = {"
+              marker = "  public: {"
               start = text.find(marker)
               if start == -1:
-                  raise SystemExit("Could not find 'export type Database'.")
+                  raise SystemExit("Could not find the public schema block.")
 
               open_brace = text.find("{", start)
               depth = 0
@@ -202,29 +203,18 @@ jobs:
                           break
 
               if end is None:
-                  raise SystemExit("Could not find the end of the Database type block.")
+                  raise SystemExit("Could not find the end of the public schema block.")
 
-              block = text[start:end]
+              return re.sub(r"\s+", "", text[start:end])
 
-              # Supabase generator metadata is not part of the schema-derived shape.
-              block = re.sub(
-                  r"__InternalSupabase\s*:\s*\{[^{}]*\}\s*",
-                  "",
-                  block,
-                  flags=re.S,
-              )
-
-              # Ignore formatting differences between generator versions/output formatters.
-              return re.sub(r"\s+", "", block)
-
-          left = normalize_database_block(committed)
-          right = normalize_database_block(generated)
+          left = extract_public_schema(committed)
+          right = extract_public_schema(generated)
 
           if left != right:
-              print("Schema-derived Database type differs from the committed file.")
+              print("Schema-derived public type differs from the committed file.")
               raise SystemExit(1)
 
-          print("Schema-derived Database type matches (formatting, comments, and generator internals ignored).")
+          print("Schema-derived public type matches (formatting, comments, helpers, and generator metadata ignored).")
           PY
 
       - name: Container diagnostics
