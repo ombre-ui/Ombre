@@ -193,28 +193,43 @@ jobs:
                           return text[start:i + 1]
               raise SystemExit(f"Could not find the end of {marker!r}.")
 
+          def remove_relationships(text):
+              marker = "Relationships:"
+              while marker in text:
+                  start = text.find(marker)
+                  open_bracket = text.find("[", start)
+                  if open_bracket == -1:
+                      break
+                  depth = 0
+                  end = None
+                  for i in range(open_bracket, len(text)):
+                      if text[i] == "[":
+                          depth += 1
+                      elif text[i] == "]":
+                          depth -= 1
+                          if depth == 0:
+                              end = i + 1
+                              break
+                  if end is None:
+                      raise SystemExit("Could not find the end of a Relationships array.")
+                  text = text[:start] + text[end:]
+              return text
+
           def normalize_tables(text):
-              # The schema source of truth is the table Row/Insert/Update shape.
-              # Relationship metadata is generator-dependent, so it is intentionally excluded.
               text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
               text = re.sub(r"//.*", "", text)
               tables = extract_block(text, "Tables: {")
-              tables = re.sub(
-                  r"\s*Relationships:\s*\[[^\]]*\]",
-                  "",
-                  tables,
-                  flags=re.S,
-              )
+              tables = remove_relationships(tables)
               return re.sub(r"\s+", "", tables)
 
           left = normalize_tables(committed)
           right = normalize_tables(generated)
 
           if left != right:
-              print("Schema-derived table types differ from the committed file.")
+              print("Schema-derived table Row/Insert/Update types differ from the committed file.")
               raise SystemExit(1)
 
-          print("Schema-derived table types match (formatting, comments, helpers, metadata, and relationship metadata ignored).")
+          print("Schema-derived table Row/Insert/Update types match.")
           PY
 
       - name: Container diagnostics
