@@ -72,6 +72,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Runner resources
         run: |
           nproc
@@ -168,69 +172,121 @@ jobs:
 
       - name: Generated types match committed types
         run: |
-          supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.ts"
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-          import os
+          supabase --version > "$RUNNER_TEMP/types-cli-version.txt"
+          supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.generated.ts"
+          # Compare the schema-derived `export type Database = { ... }` block only. The extractor matches
+          # braces (ignoring comments and string contents) and ignores formatting, comments, member
+          # separators, quote style and the PostgrestVersion member. Any change to tables, columns,
+          # nullability, optionality, views, functions, enums, or relationships is reported as a diff.
+          if ! node - "$RUNNER_TEMP" <<'NODE'
+          const fs = require('fs');
 
-          committed = Path("supabase/types/database.types.ts").read_text()
-          generated = Path(os.environ["RUNNER_TEMP"]) / "database.types.ts"
-          generated = generated.read_text()
+          // Extract the tokens of `export type Database = { ... }` using brace matching.
+          // Whitespace and comments are skipped, and string literals are read whole, so braces inside
+          // comments or strings cannot unbalance the match.
+          function tokenize(src, file) {
+            const m = /export\s+type\s+Database\s*=\s*\{/.exec(src);
+            if (!m) throw new Error(`${file}: could not find "export type Database = {"`);
+            let i = m.index + m[0].length - 1; // index of the opening brace
+            const out = [];
+            let depth = 0;
+            const isIdChar = (ch) => /[A-Za-z0-9_$]/.test(ch);
+            while (i < src.length) {
+              const c = src[i];
+              if (/\s/.test(c)) { i++; continue; }
+              if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+              if (c === '/' && src[i + 1] === '*') {
+                const end = src.indexOf('*/', i + 2);
+                if (end < 0) throw new Error(`${file}: unterminated block comment`);
+                i = end + 2;
+                continue;
+              }
+              if (c === '"' || c === "'" || c === '`') {
+                let j = i + 1;
+                let s = '';
+                while (j < src.length && src[j] !== c) {
+                  if (src[j] === '\\') { s += src[j] + (src[j + 1] || ''); j += 2; } else { s += src[j]; j++; }
+                }
+                if (j >= src.length) throw new Error(`${file}: unterminated string literal`);
+                out.push({ k: 'str', v: s });
+                i = j + 1;
+                continue;
+              }
+              if (isIdChar(c)) {
+                let j = i;
+                while (j < src.length && isIdChar(src[j])) j++;
+                out.push({ k: 'id', v: src.slice(i, j) });
+                i = j;
+                continue;
+              }
+              out.push({ k: 'p', v: c });
+              i++;
+              if (c === '{') depth++;
+              else if (c === '}') {
+                depth--;
+                if (depth === 0) return out;
+              }
+            }
+            throw new Error(`${file}: the Database block is not closed (unbalanced braces)`);
+          }
 
-          def extract_block(text, marker):
-              start = text.find(marker)
-              if start == -1:
-                  raise SystemExit(f"Could not find {marker!r}.")
-              open_brace = text.find("{", start)
-              depth = 0
-              for i in range(open_brace, len(text)):
-                  if text[i] == "{":
-                      depth += 1
-                  elif text[i] == "}":
-                      depth -= 1
-                      if depth == 0:
-                          return text[start:i + 1]
-              raise SystemExit(f"Could not find the end of {marker!r}.")
+          // Remove formatting differences only: quoting of property keys, member separators, leading
+          // union pipes, and the PostgrestVersion member (generator metadata, not schema).
+          function normalize(tokens) {
+            const isP = (t, v) => t && t.k === 'p' && t.v === v;
+            const step1 = tokens.map((tok, i) => {
+              if (tok.k === 'str' && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(tok.v)) {
+                const n1 = tokens[i + 1];
+                const n2 = tokens[i + 2];
+                if (isP(n1, ':') || (isP(n1, '?') && isP(n2, ':'))) return { k: 'id', v: tok.v };
+              }
+              return tok;
+            });
+            const step2 = step1.filter((t) => !(t.k === 'p' && (t.v === ',' || t.v === ';')));
+            const step3 = [];
+            for (let i = 0; i < step2.length; i++) {
+              const t = step2[i];
+              if (t.k === 'id' && t.v === 'PostgrestVersion' && isP(step2[i + 1], ':')) { i += 2; continue; }
+              step3.push(t);
+            }
+            const lead = new Set([':', '=', '(', '<', '[', '{']);
+            return step3.filter((t, i) => !(isP(t, '|') && i > 0 && step3[i - 1].k === 'p' && lead.has(step3[i - 1].v)));
+          }
 
-          def remove_relationships(text):
-              marker = "Relationships:"
-              while marker in text:
-                  start = text.find(marker)
-                  open_bracket = text.find("[", start)
-                  if open_bracket == -1:
-                      break
-                  depth = 0
-                  end = None
-                  for i in range(open_bracket, len(text)):
-                      if text[i] == "[":
-                          depth += 1
-                      elif text[i] == "]":
-                          depth -= 1
-                          if depth == 0:
-                              end = i + 1
-                              break
-                  if end is None:
-                      raise SystemExit("Could not find the end of a Relationships array.")
-                  text = text[:start] + text[end:]
-              return text
+          const render = (tokens) => tokens.map((t) => (t.k === 'str' ? JSON.stringify(t.v) : t.v)).join('\n') + '\n';
 
-          def normalize_tables(text):
-              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-              text = re.sub(r"//.*", "", text)
-              tables = extract_block(text, "Tables: {")
-              tables = remove_relationships(tables)
-              return re.sub(r"\s+", "", tables)
-
-          left = normalize_tables(committed)
-          right = normalize_tables(generated)
-
-          if left != right:
-              print("Schema-derived table Row/Insert/Update types differ from the committed file.")
-              raise SystemExit(1)
-
-          print("Schema-derived table Row/Insert/Update types match.")
-          PY
+          // ---- main ----
+          try {
+            const dir = process.argv[2];
+            if (!dir) throw new Error('usage: node - <temp-dir>');
+            const committedPath = 'supabase/types/database.types.ts';
+            const generatedPath = `${dir}/database.types.generated.ts`;
+            const counts = [['committed', committedPath], ['generated', generatedPath]].map(([label, file]) => {
+              const tokens = normalize(tokenize(fs.readFileSync(file, 'utf8'), file));
+              if (tokens.length < 20 || !tokens.some((t) => t.k === 'id' && t.v === 'Tables')) {
+                throw new Error(`${file}: the extracted Database block looks wrong (${tokens.length} tokens, no "Tables" member)`);
+              }
+              fs.writeFileSync(`${dir}/database.types.${label}.norm`, render(tokens));
+              return tokens.length;
+            });
+            console.log(`Database block tokens after normalization: committed=${counts[0]} generated=${counts[1]}`);
+          } catch (e) {
+            console.error(`Type comparison error: ${e.message}`);
+            process.exit(2);
+          }
+          NODE
+          then
+            echo "Could not extract and normalize the Database type block. First lines of the generated file:"
+            head -n 40 "$RUNNER_TEMP/database.types.generated.ts"
+            exit 1
+          fi
+          if diff -u "$RUNNER_TEMP/database.types.committed.norm" "$RUNNER_TEMP/database.types.generated.norm" > "$RUNNER_TEMP/database.types.diff.txt"; then
+            echo "Database type block matches the committed file (formatting, comments, separators, quote style and PostgrestVersion ignored)."
+          else
+            cat "$RUNNER_TEMP/database.types.diff.txt"
+            echo "Schema-derived Database types differ from the committed file."
+            exit 1
+          fi
 
       - name: Container diagnostics
         if: failure()
@@ -251,3 +307,67 @@ jobs:
           path: ${{ runner.temp }}/sb-*.log
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Upload types diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: types-diagnostics
+          path: |
+            ${{ runner.temp }}/database.types.generated.ts
+            ${{ runner.temp }}/database.types.committed.norm
+            ${{ runner.temp }}/database.types.generated.norm
+            ${{ runner.temp }}/database.types.diff.txt
+            ${{ runner.temp }}/types-cli-version.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # TEMPORARY: posts the type-comparison details as a PR comment when the Supabase job fails, because
+  # job logs are not readable by the automation that maintains this workflow. Remove once the types
+  # check is stable.
+  types-diagnostics:
+    name: Types diagnostics (PR comment on failure)
+    needs: supabase
+    if: ${{ always() && needs.supabase.result == 'failure' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Download diagnostics
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: types-diagnostics
+          path: diag
+
+      - name: Post diagnostics as a PR comment
+        if: ${{ hashFiles('diag/database.types.generated.ts') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "### Generated types diagnostics (temporary)"
+            echo
+            echo "Supabase CLI: $(cat diag/types-cli-version.txt 2>/dev/null || echo unknown)"
+            echo
+            if [ -s diag/database.types.diff.txt ]; then
+              echo "Normalized diff (committed vs generated Database block, one token per line):"
+              echo '```diff'
+              head -c 15000 diag/database.types.diff.txt
+              echo '```'
+            else
+              echo "No normalized diff was produced (the extraction step failed or the blocks matched)."
+            fi
+            echo
+            echo "<details><summary>Generated file, first 300 lines</summary>"
+            echo
+            echo '```ts'
+            head -n 300 diag/database.types.generated.ts | head -c 30000
+            echo '```'
+            echo "</details>"
+          } > body.md
+          gh pr comment "$PR_NUMBER" --body-file body.md
