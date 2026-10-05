@@ -176,8 +176,9 @@ jobs:
           supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.generated.ts"
           # Compare the schema-derived `export type Database = { ... }` block only. The extractor matches
           # braces (ignoring comments and string contents) and ignores formatting, comments, member
-          # separators, quote style and the PostgrestVersion member. Any change to tables, columns,
-          # nullability, optionality, views, functions, enums, or relationships is reported as a diff.
+          # separators, quote style and the `__InternalSupabase` metadata member (PostgREST version; the
+          # hosted generator emits it and the CLI does not). Any change to tables, columns, nullability,
+          # optionality, views, functions, enums or relationships is reported as a diff.
           if ! node - "$RUNNER_TEMP" <<'NODE'
           const fs = require('fs');
 
@@ -230,8 +231,10 @@ jobs:
             throw new Error(`${file}: the Database block is not closed (unbalanced braces)`);
           }
 
-          // Remove formatting differences only: quoting of property keys, member separators, leading
-          // union pipes, and the PostgrestVersion member (generator metadata, not schema).
+          // Remove formatting differences and generator metadata only. Formatting: quoting of property keys,
+          // member separators and leading union pipes. Metadata: the `__InternalSupabase` member, which holds
+          // only the PostgREST version. The hosted generator emits it and the Supabase CLI does not, and it is
+          // not derived from the database schema.
           function normalize(tokens) {
             const isP = (t, v) => t && t.k === 'p' && t.v === v;
             const step1 = tokens.map((tok, i) => {
@@ -246,7 +249,17 @@ jobs:
             const step3 = [];
             for (let i = 0; i < step2.length; i++) {
               const t = step2[i];
-              if (t.k === 'id' && t.v === 'PostgrestVersion' && isP(step2[i + 1], ':')) { i += 2; continue; }
+              if (t.k === 'id' && t.v === '__InternalSupabase' && isP(step2[i + 1], ':') && isP(step2[i + 2], '{')) {
+                let depth = 0;
+                let j = i + 2;
+                for (; j < step2.length; j++) {
+                  if (isP(step2[j], '{')) depth++;
+                  else if (isP(step2[j], '}')) { depth--; if (depth === 0) break; }
+                }
+                if (j >= step2.length) throw new Error('unbalanced __InternalSupabase block');
+                i = j;
+                continue;
+              }
               step3.push(t);
             }
             const lead = new Set([':', '=', '(', '<', '[', '{']);
@@ -281,7 +294,7 @@ jobs:
             exit 1
           fi
           if diff -u "$RUNNER_TEMP/database.types.committed.norm" "$RUNNER_TEMP/database.types.generated.norm" > "$RUNNER_TEMP/database.types.diff.txt"; then
-            echo "Database type block matches the committed file (formatting, comments, separators, quote style and PostgrestVersion ignored)."
+            echo "Database type block matches the committed file (formatting, comments, separators, quote style and __InternalSupabase metadata ignored)."
           else
             cat "$RUNNER_TEMP/database.types.diff.txt"
             echo "Schema-derived Database types differ from the committed file."
@@ -321,53 +334,3 @@ jobs:
             ${{ runner.temp }}/types-cli-version.txt
           if-no-files-found: ignore
           retention-days: 7
-
-  # TEMPORARY: posts the type-comparison details as a PR comment when the Supabase job fails, because
-  # job logs are not readable by the automation that maintains this workflow. Remove once the types
-  # check is stable.
-  types-diagnostics:
-    name: Types diagnostics (PR comment on failure)
-    needs: supabase
-    if: ${{ always() && needs.supabase.result == 'failure' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      pull-requests: write
-      issues: write
-    steps:
-      - name: Download diagnostics
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: types-diagnostics
-          path: diag
-
-      - name: Post diagnostics as a PR comment
-        if: ${{ hashFiles('diag/database.types.generated.ts') != '' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          {
-            echo "### Generated types diagnostics (temporary)"
-            echo
-            echo "Supabase CLI: $(cat diag/types-cli-version.txt 2>/dev/null || echo unknown)"
-            echo
-            if [ -s diag/database.types.diff.txt ]; then
-              echo "Normalized diff (committed vs generated Database block, one token per line):"
-              echo '```diff'
-              head -c 15000 diag/database.types.diff.txt
-              echo '```'
-            else
-              echo "No normalized diff was produced (the extraction step failed or the blocks matched)."
-            fi
-            echo
-            echo "<details><summary>Generated file, first 300 lines</summary>"
-            echo
-            echo '```ts'
-            head -n 300 diag/database.types.generated.ts | head -c 30000
-            echo '```'
-            echo "</details>"
-          } > body.md
-          gh pr comment "$PR_NUMBER" --body-file body.md
