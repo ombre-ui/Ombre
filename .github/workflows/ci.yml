@@ -1,0 +1,336 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Action versions are pinned by tag for now; pin by commit SHA during A8 hardening.
+# The three jobs are independent. The Supabase job does not need package-lock.json.
+
+jobs:
+  build:
+    name: Install, build, test, audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require package-lock.json
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "package-lock.json is missing. Run 'npm install' locally and commit the lockfile."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # No test framework is installed yet; this runs a "test" script only if one exists.
+      - name: Tests (if defined)
+        run: npm test --if-present
+
+      - name: Dependency audit (production dependencies, high severity and above)
+        run: npm audit --omit=dev --audit-level=high
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      - name: Scan history and working tree
+        run: ./gitleaks detect --source . --redact --verbose --exit-code 1
+
+  supabase:
+    name: Supabase migration replay, schema fingerprint, type drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Runner resources
+        run: |
+          nproc
+          free -h
+          df -h /
+
+      - name: Check migration file naming
+        run: |
+          bad=$(ls supabase/migrations | grep -Ev '^[0-9]{14}_[a-z0-9_]+\.sql$' || true)
+          if [ -n "$bad" ]; then
+            echo "Unexpected migration file name(s): $bad"
+            exit 1
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Supabase CLI version
+        run: supabase --version
+
+      # The local stack's own service initialization (realtime, storage, auth) can fail on small
+      # machines before any Ombre migration runs. Attempts 1 and 2 skip services this job does not
+      # need; attempt 3 starts the default stack. Everything is bounded to three attempts.
+      - name: Start local stack (bounded retry)
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::supabase start, attempt ${attempt}"
+            if [ "$attempt" -lt 3 ]; then
+              args="-x studio,imgproxy,edge-runtime,logflare,vector"
+            else
+              args=""
+            fi
+            if supabase start --debug $args > "$RUNNER_TEMP/sb-start-${attempt}.log" 2>&1; then
+              echo "supabase start succeeded on attempt ${attempt}"
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "attempt ${attempt} failed; last log lines:"
+            tail -n 40 "$RUNNER_TEMP/sb-start-${attempt}.log"
+            echo "::endgroup::"
+            supabase stop --no-backup || true
+            sleep 15
+          done
+          echo "supabase start failed after 3 attempts"
+          exit 1
+
+      # A migration SQL error (SQLSTATE) is a real failure and is never retried.
+      # Only infrastructure failures before or around migrations are retried.
+      - name: Reset database from migrations only (bounded retry)
+        run: |
+          for attempt in 1 2 3; do
+            log="$RUNNER_TEMP/sb-reset-${attempt}.log"
+            echo "::group::supabase db reset, attempt ${attempt}"
+            if supabase db reset > "$log" 2>&1; then
+              cat "$log"
+              echo "::endgroup::"
+              exit 0
+            fi
+            tail -n 60 "$log"
+            echo "::endgroup::"
+            if grep -q 'SQLSTATE' "$log"; then
+              echo "Migration SQL error detected. Not retrying."
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "supabase db reset failed after 3 attempts (no migration SQL error detected)"
+          exit 1
+
+      - name: Verify applied migration history matches repo files
+        run: |
+          expected=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]{14})_(.*)\.sql$/\1 \2/' | sort)
+          actual=$(docker exec supabase_db_ombre psql -U postgres -At -c "select version||' '||name from supabase_migrations.schema_migrations order by version")
+          echo "expected (from repo files):"; echo "$expected"
+          echo "actual (local database):"; echo "$actual"
+          if [ "$expected" != "$actual" ]; then
+            echo "Migration history mismatch"
+            exit 1
+          fi
+
+      # A1 baseline: expected values were computed read-only against the live project after
+      # migration 4. When a later migration changes the schema, regenerate the expected file
+      # (see docs/ops/schema-fingerprint.sql).
+      - name: Schema fingerprint matches the live baseline
+        run: |
+          docker exec -i supabase_db_ombre psql -U postgres -At -f - < docs/ops/schema-fingerprint.sql > "$RUNNER_TEMP/fingerprint.actual"
+          cat "$RUNNER_TEMP/fingerprint.actual"
+          if ! diff -u docs/ops/schema-fingerprint.expected "$RUNNER_TEMP/fingerprint.actual"; then
+            echo "Schema fingerprint differs from the live baseline. The first differing section names the object group."
+            exit 1
+          fi
+          echo "fingerprint matches"
+
+      - name: Generated types match committed types
+        run: |
+          supabase --version > "$RUNNER_TEMP/types-cli-version.txt"
+          supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.generated.ts"
+          # Compare the schema-derived `export type Database = { ... }` block only. The extractor matches
+          # braces (ignoring comments and string contents) and ignores formatting, comments, member
+          # separators, quote style and the `__InternalSupabase` metadata member (PostgREST version; the
+          # hosted generator emits it and the CLI does not). Any change to tables, columns, nullability,
+          # optionality, views, functions, enums or relationships is reported as a diff.
+          if ! node - "$RUNNER_TEMP" <<'NODE'
+          const fs = require('fs');
+
+          // Extract the tokens of `export type Database = { ... }` using brace matching.
+          // Whitespace and comments are skipped, and string literals are read whole, so braces inside
+          // comments or strings cannot unbalance the match.
+          function tokenize(src, file) {
+            const m = /export\s+type\s+Database\s*=\s*\{/.exec(src);
+            if (!m) throw new Error(`${file}: could not find "export type Database = {"`);
+            let i = m.index + m[0].length - 1; // index of the opening brace
+            const out = [];
+            let depth = 0;
+            const isIdChar = (ch) => /[A-Za-z0-9_$]/.test(ch);
+            while (i < src.length) {
+              const c = src[i];
+              if (/\s/.test(c)) { i++; continue; }
+              if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+              if (c === '/' && src[i + 1] === '*') {
+                const end = src.indexOf('*/', i + 2);
+                if (end < 0) throw new Error(`${file}: unterminated block comment`);
+                i = end + 2;
+                continue;
+              }
+              if (c === '"' || c === "'" || c === '`') {
+                let j = i + 1;
+                let s = '';
+                while (j < src.length && src[j] !== c) {
+                  if (src[j] === '\\') { s += src[j] + (src[j + 1] || ''); j += 2; } else { s += src[j]; j++; }
+                }
+                if (j >= src.length) throw new Error(`${file}: unterminated string literal`);
+                out.push({ k: 'str', v: s });
+                i = j + 1;
+                continue;
+              }
+              if (isIdChar(c)) {
+                let j = i;
+                while (j < src.length && isIdChar(src[j])) j++;
+                out.push({ k: 'id', v: src.slice(i, j) });
+                i = j;
+                continue;
+              }
+              out.push({ k: 'p', v: c });
+              i++;
+              if (c === '{') depth++;
+              else if (c === '}') {
+                depth--;
+                if (depth === 0) return out;
+              }
+            }
+            throw new Error(`${file}: the Database block is not closed (unbalanced braces)`);
+          }
+
+          // Remove formatting differences and generator metadata only. Formatting: quoting of property keys,
+          // member separators and leading union pipes. Metadata: the `__InternalSupabase` member, which holds
+          // only the PostgREST version. The hosted generator emits it and the Supabase CLI does not, and it is
+          // not derived from the database schema.
+          function normalize(tokens) {
+            const isP = (t, v) => t && t.k === 'p' && t.v === v;
+            const step1 = tokens.map((tok, i) => {
+              if (tok.k === 'str' && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(tok.v)) {
+                const n1 = tokens[i + 1];
+                const n2 = tokens[i + 2];
+                if (isP(n1, ':') || (isP(n1, '?') && isP(n2, ':'))) return { k: 'id', v: tok.v };
+              }
+              return tok;
+            });
+            const step2 = step1.filter((t) => !(t.k === 'p' && (t.v === ',' || t.v === ';')));
+            const step3 = [];
+            for (let i = 0; i < step2.length; i++) {
+              const t = step2[i];
+              if (t.k === 'id' && t.v === '__InternalSupabase' && isP(step2[i + 1], ':') && isP(step2[i + 2], '{')) {
+                let depth = 0;
+                let j = i + 2;
+                for (; j < step2.length; j++) {
+                  if (isP(step2[j], '{')) depth++;
+                  else if (isP(step2[j], '}')) { depth--; if (depth === 0) break; }
+                }
+                if (j >= step2.length) throw new Error('unbalanced __InternalSupabase block');
+                i = j;
+                continue;
+              }
+              step3.push(t);
+            }
+            const lead = new Set([':', '=', '(', '<', '[', '{']);
+            return step3.filter((t, i) => !(isP(t, '|') && i > 0 && step3[i - 1].k === 'p' && lead.has(step3[i - 1].v)));
+          }
+
+          const render = (tokens) => tokens.map((t) => (t.k === 'str' ? JSON.stringify(t.v) : t.v)).join('\n') + '\n';
+
+          // ---- main ----
+          try {
+            const dir = process.argv[2];
+            if (!dir) throw new Error('usage: node - <temp-dir>');
+            const committedPath = 'supabase/types/database.types.ts';
+            const generatedPath = `${dir}/database.types.generated.ts`;
+            const counts = [['committed', committedPath], ['generated', generatedPath]].map(([label, file]) => {
+              const tokens = normalize(tokenize(fs.readFileSync(file, 'utf8'), file));
+              if (tokens.length < 20 || !tokens.some((t) => t.k === 'id' && t.v === 'Tables')) {
+                throw new Error(`${file}: the extracted Database block looks wrong (${tokens.length} tokens, no "Tables" member)`);
+              }
+              fs.writeFileSync(`${dir}/database.types.${label}.norm`, render(tokens));
+              return tokens.length;
+            });
+            console.log(`Database block tokens after normalization: committed=${counts[0]} generated=${counts[1]}`);
+          } catch (e) {
+            console.error(`Type comparison error: ${e.message}`);
+            process.exit(2);
+          }
+          NODE
+          then
+            echo "Could not extract and normalize the Database type block. First lines of the generated file:"
+            head -n 40 "$RUNNER_TEMP/database.types.generated.ts"
+            exit 1
+          fi
+          if diff -u "$RUNNER_TEMP/database.types.committed.norm" "$RUNNER_TEMP/database.types.generated.norm" > "$RUNNER_TEMP/database.types.diff.txt"; then
+            echo "Database type block matches the committed file (formatting, comments, separators, quote style and __InternalSupabase metadata ignored)."
+          else
+            cat "$RUNNER_TEMP/database.types.diff.txt"
+            echo "Schema-derived Database types differ from the committed file."
+            exit 1
+          fi
+
+      - name: Container diagnostics
+        if: failure()
+        run: |
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}' || true
+          for c in $(docker ps -a --format '{{.Names}}' | grep -i supabase || true); do
+            echo "::group::logs ${c}"
+            docker logs --tail 150 "$c" 2>&1 || true
+            echo "::endgroup::"
+          done
+          free -h || true
+
+      - name: Upload Supabase logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-logs
+          path: ${{ runner.temp }}/sb-*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload types diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: types-diagnostics
+          path: |
+            ${{ runner.temp }}/database.types.generated.ts
+            ${{ runner.temp }}/database.types.committed.norm
+            ${{ runner.temp }}/database.types.generated.norm
+            ${{ runner.temp }}/database.types.diff.txt
+            ${{ runner.temp }}/types-cli-version.txt
+          if-no-files-found: ignore
+          retention-days: 7
