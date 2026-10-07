@@ -21,20 +21,25 @@ major_version = 17
 
 [auth]
 enabled = true
-# Local origin of the Vite dev server. Revisit when the same-origin /api BFF is wired up (A2/A3).
-site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://127.0.0.1:5173"]
+# Local origin served by `vercel dev` (port 3000): the SPA and the same-origin /api BFF.
+# Email links (PKCE) land on /auth/callback and /auth/callback/recovery.
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "http://localhost:3000/auth/callback/recovery", "http://127.0.0.1:3000/auth/callback", "http://127.0.0.1:3000/auth/callback/recovery"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
 enable_anonymous_sign_ins = false
 enable_manual_linking = false
+# A2 password policy: 12 characters minimum (also enforced by the /api layer).
+minimum_password_length = 12
 
 [auth.email]
 enable_signup = true
 enable_confirmations = true
 double_confirm_changes = true
+# Changing a password requires a recent sign-in (recovery sessions count).
+secure_password_change = true
 
 # Captured from the deployed function. Requests without a valid JWT are rejected.
 [functions.user-context]
