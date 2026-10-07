@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useOmbreData } from '../../lib/store.jsx'
+import { useAuth } from '../../lib/auth/AuthProvider.jsx'
 import SettingsToggle from './SettingsToggle.jsx'
 import SettingsSegmented from './SettingsSegmented.jsx'
 import './settings.css'
@@ -32,6 +33,7 @@ export default function SettingsPage() {
     clearAllMemory,
   } = useOmbreData()
   const { hash } = useLocation()
+  const { user, signOut } = useAuth()
 
   const settings = getSettings()
   const profile = getProfile()
@@ -66,9 +68,12 @@ export default function SettingsPage() {
     }
   }
 
-  function handleSignOut() {
-    setToast('There’s no account signed in yet — authentication isn’t connected.')
-    window.setTimeout(() => setToast(null), 2400)
+  async function handleSignOut() {
+    const result = await signOut()
+    if (!result.ok) {
+      setToast('Couldn’t sign out. Check your connection and try again.')
+      window.setTimeout(() => setToast(null), 2400)
+    }
   }
 
   return (
@@ -217,19 +222,7 @@ export default function SettingsPage() {
       <section id="account" className="settings-section">
         <h2 className="text-heading-sm">Account</h2>
         <p className="text-body-sm text-secondary settings-section-intro">
-          {profile?.email || profile?.name ? (
-            <>
-              {profile.name || 'No name set'} · {profile.email || 'No email set'}
-            </>
-          ) : (
-            <>
-              No account information set yet — add it from{' '}
-              <Link to="/app/profile" className="settings-link-active">
-                Profile
-              </Link>
-              .
-            </>
-          )}
+          {profile?.name || 'No name set'} · {user?.email || 'No email'}
         </p>
 
         <div className="settings-danger-row">
