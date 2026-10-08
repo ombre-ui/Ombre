@@ -5,10 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:vercel": "vercel dev --local-config vercel-dev.json --listen 3000",
     "build": "vite build",
-    "preview": "vite preview"
+    "postbuild": "node scripts/check-bundle-secrets.mjs dist",
+    "preview": "vite preview",
+    "test": "node scripts/check-browser-storage.mjs && node --test \"tests/api/*.test.js\" \"tests/frontend/*.test.js\" \"tests/scripts/*.test.js\"",
+    "test:integration": "AUTH_INTEGRATION=1 node --test tests/integration/auth-flow.test.js"
   },
   "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.117.2",
     "lucide-react": "^0.441.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -17,5 +23,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.2",
     "vite": "^5.4.8"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

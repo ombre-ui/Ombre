@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useOmbreData } from '../../lib/store.jsx'
+import { useAuth } from '../../lib/auth/AuthProvider.jsx'
 import SettingsToggle from '../settings/SettingsToggle.jsx'
 import './profile.css'
 
@@ -23,10 +24,11 @@ export default function ProfilePage() {
     getSettings,
     updateSettings,
   } = useOmbreData()
+  const { user, signOut } = useAuth()
+  const accountEmail = user?.email ?? ''
   const profile = getProfile()
   const [isEditing, setIsEditing] = useState(false)
   const [name, setName] = useState(profile?.name ?? '')
-  const [email, setEmail] = useState(profile?.email ?? '')
   const [toast, setToast] = useState(null)
 
   if (!profile) return null
@@ -37,19 +39,21 @@ export default function ProfilePage() {
   const memoryCount = listMemoryItems().length
 
   function handleSave() {
-    updateProfile({ name: name.trim(), email: email.trim() })
+    updateProfile({ name: name.trim() })
     setIsEditing(false)
   }
 
   function handleCancel() {
     setName(profile.name)
-    setEmail(profile.email)
     setIsEditing(false)
   }
 
-  function handleSignOut() {
-    setToast('There’s no account signed in yet — authentication isn’t connected.')
-    window.setTimeout(() => setToast(null), 2400)
+  async function handleSignOut() {
+    const result = await signOut()
+    if (!result.ok) {
+      setToast('Couldn’t sign out. Check your connection and try again.')
+      window.setTimeout(() => setToast(null), 2400)
+    }
   }
 
   const localSinceLabel = new Date(profile.localSince).toLocaleDateString(undefined, {
@@ -68,7 +72,7 @@ export default function ProfilePage() {
       <section className="profile-card">
         <div className="profile-identity">
           <span className="profile-avatar" aria-hidden="true">
-            {initialsFor(name, email)}
+            {initialsFor(name, accountEmail)}
           </span>
 
           {isEditing ? (
@@ -84,17 +88,8 @@ export default function ProfilePage() {
                 placeholder="Your name"
                 autoFocus
               />
-              <label className="text-label" htmlFor="profile-email">
-                Email
-              </label>
-              <input
-                id="profile-email"
-                type="email"
-                className="profile-input text-body"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
+              <span className="text-label">Email</span>
+              <span className="text-body-sm text-secondary">{accountEmail}</span>
               <div className="profile-edit-actions">
                 <button type="button" className="profile-btn-ghost motion-interactive" onClick={handleCancel}>
                   Cancel
@@ -107,7 +102,7 @@ export default function ProfilePage() {
           ) : (
             <div className="profile-fields">
               <span className="text-heading-sm profile-name">{profile.name || 'Your name'}</span>
-              <span className="text-body-sm text-secondary">{profile.email || 'you@example.com'}</span>
+              <span className="text-body-sm text-secondary">{accountEmail}</span>
               <button
                 type="button"
                 className="profile-btn-ghost motion-interactive profile-edit-trigger"
