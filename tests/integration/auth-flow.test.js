@@ -13,6 +13,11 @@ const NEW_PASSWORD = 'integration-test-password-2'
 
 const suite = RUN ? test : test.skip
 
+if (RUN) {
+  assert.ok(process.env.SUPABASE_URL, 'SUPABASE_URL is required for AUTH_INTEGRATION=1')
+  assert.ok(process.env.SUPABASE_PUBLISHABLE_KEY, 'SUPABASE_PUBLISHABLE_KEY is required for AUTH_INTEGRATION=1')
+}
+
 function browser(routes) {
   const jar = new Map()
   const cookieHeader = () => Array.from(jar, ([k, v]) => `${k}=${encodeURIComponent(v)}`).join('; ')
@@ -147,7 +152,13 @@ suite('PKCE link opened in a different browser fails with the wrong-browser erro
   process.env.AUTH_ALLOW_INSECURE_COOKIES = 'true'
   const { routes } = await import('../../api/_lib/real.js')
   const email = `a2-xb-${Date.now()}@example.com`
-  await browser(routes).call('signup', { path: '/api/auth/signup', body: { email, password: PASSWORD } })
+  const b = browser(routes)
+  const signup = await b.call('signup', {
+    path: '/api/auth/signup',
+    body: { email, password: PASSWORD }
+  })
+  assert.equal(signup.status, 200)
+  assert.deepEqual(signup.body, { ok: true, status: 'check_email' })
   const { code } = await codeFromLink(await latestMailLink(email, /confirm/i))
   const other = await browser(routes).call('callback', { path: '/api/auth/callback', body: { code } })
   assert.equal(other.status, 400)
