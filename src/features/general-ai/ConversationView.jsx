@@ -1,6 +1,7 @@
 import Composer from './Composer.jsx'
 import MessageList from './MessageList.jsx'
 import AddToProjectMenu from './AddToProjectMenu.jsx'
+import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import './general-ai.css'
 
 export default function ConversationView({ conversation, mentorContext, onSend, onRetry, onLinked }) {
@@ -25,6 +26,8 @@ export default function ConversationView({ conversation, mentorContext, onSend, 
           onLinked={onLinked}
         />
       </div>
+
+      <PreviewNotice kind="demo" />
 
       {showMentorIntro && (
         <p className="text-body-sm text-secondary conversation-mentor-intro">
