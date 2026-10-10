@@ -10,7 +10,7 @@
     "postbuild": "node scripts/check-bundle-secrets.mjs dist",
     "preview": "vite preview",
     "test": "node scripts/check-browser-storage.mjs && node --test \"tests/api/*.test.js\" \"tests/frontend/*.test.js\" \"tests/scripts/*.test.js\"",
-    "test:integration": "AUTH_INTEGRATION=1 node --test tests/integration/auth-flow.test.js"
+    "test:integration": "AUTH_INTEGRATION=1 node --test tests/integration/auth-flow.test.js tests/integration/user-state.test.js"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
