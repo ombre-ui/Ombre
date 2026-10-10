@@ -4,8 +4,12 @@
  * The project is plain JS (not TypeScript), so these are documented factory
  * functions rather than compiled interfaces. They exist so every part of the
  * app creates these objects in exactly one shape, which is what makes it
- * possible to swap the mock store (`./store.jsx`) for real API / Supabase
+ * possible to swap the session-only demo store (`./store.jsx`) for real API
  * calls later without touching component code.
+ *
+ * Profile and settings are real, server-owned data and are not modelled here:
+ * their wire shapes are documented in docs/user-data.md and held by
+ * `./user/UserStateProvider.jsx`.
  *
  * @typedef {'user' | 'assistant'} MessageRole
  * @typedef {'pending' | 'complete' | 'error'} MessageStatus
@@ -23,6 +27,7 @@
  * @property {MessageRole} role
  * @property {string} content
  * @property {MessageStatus} status
+ * @property {boolean} demo     true when the content is demo/placeholder output, never real model output
  * @property {Attachment[]} attachments
  * @property {string} createdAt  ISO timestamp
  *
@@ -59,11 +64,6 @@
  * @property {string} content     the remembered text itself
  * @property {string} createdAt
  * @property {string} updatedAt
- *
- * @typedef {Object} OmbreProfile
- * @property {string} name            empty until the person fills it in — no real auth yet
- * @property {string} email
- * @property {string} localSince      ISO timestamp of first local use, NOT a real account creation date
  */
 
 export function createId() {
@@ -86,13 +86,14 @@ export function makeConversation({ projectId = null, mentorId = null } = {}) {
 }
 
 /** @returns {Message} */
-export function makeMessage({ conversationId, role, content, status = 'complete', attachments = [] }) {
+export function makeMessage({ conversationId, role, content, status = 'complete', attachments = [], demo = false }) {
   return {
     id: createId(),
     conversationId,
     role,
     content,
     status,
+    demo,
     attachments,
     createdAt: new Date().toISOString(),
   }
@@ -131,14 +132,5 @@ export function makeMemoryItem({ label = 'Note', content, createdAt }) {
     content,
     createdAt: now,
     updatedAt: now,
-  }
-}
-
-/** @returns {OmbreProfile} */
-export function makeProfile() {
-  return {
-    name: '',
-    email: '',
-    localSince: new Date().toISOString(),
   }
 }
