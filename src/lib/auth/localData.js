@@ -1,21 +1,21 @@
-// Minimal A2 isolation for the local demo data (the full removal of local persistence belongs to A3).
-// Must equal STORAGE_KEY in src/lib/store.jsx; scripts/check-browser-storage.mjs enforces that.
-export const MOCK_DATA_STORAGE_KEY = 'ombre-mock-data-v1'
+// Legacy cleanup (A3). Before A3 the demo data layer persisted everything (conversations, projects, memory,
+// seeded items, a local "profile") to localStorage under this key. Nothing writes it any more; this removes
+// what older builds left behind so previously seeded or demo data can never reappear.
+// scripts/check-browser-storage.mjs allows this key to be removed here and nowhere else.
+export const LEGACY_MOCK_DATA_KEY = 'ombre-mock-data-v1'
 
-export function wipeMockData() {
+export function purgeLegacyLocalData() {
   try {
-    window.localStorage.removeItem(MOCK_DATA_STORAGE_KEY)
+    window.localStorage.removeItem(LEGACY_MOCK_DATA_KEY)
   } catch {
-    // storage unavailable: nothing to wipe
+    // storage unavailable: nothing to remove
   }
 }
 
-// Wipe, then hard-navigate. A hard navigation is required: OmbreDataProvider keeps the data in memory and
-// re-persists it on every change, so wiping alone would let the previous session's data reappear.
+// Purge, then hard-navigate. The hard navigation is still required on sign-in, sign-out and callback
+// completion: it drops every piece of in-memory state (user state and session-only demo data) so nothing
+// from one account can be seen by the next.
 export function wipeAndNavigate(path) {
-  wipeMockData()
-  // A mock reply timer can fire between the wipe and the actual unload and re-persist state;
-  // wipe once more at the very end of this page's life.
-  window.addEventListener('pagehide', wipeMockData, { once: true })
+  purgeLegacyLocalData()
   window.location.replace(path)
 }
