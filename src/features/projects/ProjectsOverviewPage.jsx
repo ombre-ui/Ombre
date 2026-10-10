@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
+import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import ProjectCard from './ProjectCard.jsx'
 import CreateProjectDialog from './CreateProjectDialog.jsx'
 import './projects.css'
@@ -28,6 +29,8 @@ export default function ProjectsOverviewPage() {
           New project
         </button>
       </div>
+
+      <PreviewNotice />
 
       {projects.length === 0 ? (
         <div className="projects-empty">
