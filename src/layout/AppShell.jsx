@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Sidebar from './Sidebar.jsx'
-import { useOmbreData } from '../lib/store.jsx'
+import { useUserState } from '../lib/user/UserStateProvider.jsx'
 import './AppShell.css'
+import './PreviewNotice.css'
 
 function useIsMobile(breakpoint = 767) {
   const [isMobile, setIsMobile] = useState(
@@ -18,9 +19,21 @@ function useIsMobile(breakpoint = 767) {
 
 export default function AppShell({ children }) {
   const isMobile = useIsMobile()
-  // Theme now lives in the shared store (src/lib/store.jsx) so the Settings
-  // page can read and change the same value the sidebar toggle controls.
-  const { theme, toggleTheme } = useOmbreData()
+  // Theme is a server-owned setting (src/lib/user/UserStateProvider.jsx); the sidebar toggle and the
+  // Settings page both read and change that same value.
+  const { theme, toggleTheme } = useUserState()
+  const [themeError, setThemeError] = useState(false)
+  const themeErrorTimer = useRef(null)
+
+  async function handleToggleTheme() {
+    const result = await toggleTheme()
+    if (!result.ok) {
+      setThemeError(true)
+      window.clearTimeout(themeErrorTimer.current)
+      themeErrorTimer.current = window.setTimeout(() => setThemeError(false), 2400)
+    }
+  }
+  useEffect(() => () => window.clearTimeout(themeErrorTimer.current), [])
 
   const [collapsed, setCollapsed] = useState(() => {
     const stored = window.localStorage.getItem('ombre-sidebar-collapsed')
@@ -69,8 +82,9 @@ export default function AppShell({ children }) {
         mobileOpen={isMobile && mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
         isMobile={isMobile}
-        theme={theme}
-        onToggleTheme={toggleTheme}
+        theme={theme.resolved}
+        onToggleTheme={handleToggleTheme}
+        themeDisabled={!theme.ready}
       />
       <div className="app-shell-main">
         {isMobile && (
@@ -90,6 +104,11 @@ export default function AppShell({ children }) {
         )}
         <main className="app-workspace">{children}</main>
       </div>
+      {themeError && (
+        <div className="shell-toast motion-reveal" role="status">
+          Couldn’t save your theme. It wasn’t changed.
+        </div>
+      )}
     </div>
   )
 }

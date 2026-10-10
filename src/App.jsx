@@ -1,8 +1,9 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import AppShell from './layout/AppShell.jsx'
 import { OmbreDataProvider } from './lib/store.jsx'
-import { AuthProvider } from './lib/auth/AuthProvider.jsx'
+import { AuthProvider, useAuth } from './lib/auth/AuthProvider.jsx'
 import { RequireAuth, PublicOnly } from './lib/auth/guards.jsx'
+import { UserStateProvider } from './lib/user/UserStateProvider.jsx'
 import LoginPage from './features/auth/LoginPage.jsx'
 import SignupPage from './features/auth/SignupPage.jsx'
 import ForgotPasswordPage from './features/auth/ForgotPasswordPage.jsx'
@@ -29,21 +30,36 @@ function ShellLayout() {
   )
 }
 
+// Everything that only exists for a signed-in user. Mounted inside <RequireAuth/>, so signed-out visitors
+// never trigger a user-data request, and keyed by user id so one account's state can never carry over to the
+// next. Real, server-owned state (profile/settings) and the session-only demo data live side by side here.
+function AuthedProviders() {
+  const { user } = useAuth()
+  const userId = user ? user.id : 'anonymous'
+  return (
+    <UserStateProvider key={userId}>
+      <OmbreDataProvider key={userId}>
+        <Outlet />
+      </OmbreDataProvider>
+    </UserStateProvider>
+  )
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <OmbreDataProvider>
-        <Routes>
-          <Route element={<PublicOnly />}>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          </Route>
+      <Routes>
+        <Route element={<PublicOnly />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        </Route>
 
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
-          <Route path="/auth/callback/recovery" element={<AuthCallbackPage purpose="recovery" />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/auth/callback/recovery" element={<AuthCallbackPage purpose="recovery" />} />
 
-          <Route element={<RequireAuth />}>
+        <Route element={<RequireAuth />}>
+          <Route element={<AuthedProviders />}>
             <Route path="/reset-password" element={<ResetPasswordPage />} />
 
             <Route element={<ShellLayout />}>
@@ -73,8 +89,8 @@ export default function App() {
               <Route path="*" element={<Navigate to="/app/general" replace />} />
             </Route>
           </Route>
-        </Routes>
-      </OmbreDataProvider>
+        </Route>
+      </Routes>
     </AuthProvider>
   )
 }
