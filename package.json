@@ -8,6 +8,7 @@
     "dev:vercel": "vercel dev --local-config vercel-dev.json --listen 3000",
     "build": "vite build",
     "postbuild": "node scripts/check-bundle-secrets.mjs dist",
+    "check:dist": "node scripts/check-dist-assets.mjs dist vercel.json",
     "preview": "vite preview",
     "test": "node scripts/check-browser-storage.mjs && node scripts/check-ui-wiring.mjs && node --test \"tests/api/*.test.js\" \"tests/frontend/*.test.js\" \"tests/scripts/*.test.js\"",
     "test:integration": "AUTH_INTEGRATION=1 node --test tests/integration/auth-flow.test.js tests/integration/user-state.test.js"
