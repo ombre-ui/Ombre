@@ -1,6 +1,7 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
+import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import './projects.css'
 
 export default function ProjectWorkspacePage() {
@@ -9,10 +10,8 @@ export default function ProjectWorkspacePage() {
   const { getProject, listConversationsForProject, createConversation, sendMessage } = useOmbreData()
 
   const project = getProject(projectId)
-  if (!project) {
-    navigate('/app/projects', { replace: true })
-    return null
-  }
+  // Projects are session-only for now, so after a reload (or a stale link) the project no longer exists.
+  if (!project) return <Navigate to="/app/projects" replace />
 
   const conversations = listConversationsForProject(projectId)
 
@@ -29,6 +28,11 @@ export default function ProjectWorkspacePage() {
           <p className="text-body text-secondary">{project.description}</p>
         )}
       </header>
+
+      <PreviewNotice>
+        Preview only. This project and the conversations in it exist only in this browser session. They aren’t saved
+        to your account and disappear when you reload.
+      </PreviewNotice>
 
       <section className="project-section">
         <div className="project-section-header">

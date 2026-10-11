@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useOmbreData } from '../../lib/store.jsx'
 import { getMentorWithPath } from '../mentors/categories.js'
 import EmptyStart from './EmptyStart.jsx'
@@ -14,12 +14,9 @@ export default function GeneralAIPage() {
 
   const conversation = conversationId ? getConversation(conversationId) : null
 
-  // A conversation id was in the URL but doesn't exist (e.g. stale link) —
-  // fall back to a fresh draft rather than showing a dead page.
-  if (conversationId && !conversation) {
-    navigate('/app/general', { replace: true })
-    return null
-  }
+  // A conversation id was in the URL but doesn't exist (a stale link, or a reload: conversations are
+  // session-only for now) — fall back to a fresh draft rather than showing a dead page.
+  if (conversationId && !conversation) return <Navigate to="/app/general" replace />
 
   const mentorContext = conversation?.mentorId ? getMentorWithPath(conversation.mentorId) : null
 
