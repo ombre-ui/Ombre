@@ -1,0 +1,40 @@
+/* "Continue with <provider>" controls on the sign-in screen. Design tokens only. */
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-btn-oauth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+.auth-btn-oauth:hover:not(:disabled) {
+  background: var(--surface-elevated);
+}
+.auth-btn-oauth:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
