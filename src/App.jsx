@@ -57,6 +57,7 @@ export default function App() {
 
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/auth/callback/recovery" element={<AuthCallbackPage purpose="recovery" />} />
+        <Route path="/auth/callback/oauth" element={<AuthCallbackPage purpose="oauth" />} />
 
         <Route element={<RequireAuth />}>
           <Route element={<AuthedProviders />}>

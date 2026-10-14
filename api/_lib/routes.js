@@ -1,6 +1,6 @@
 import { ApiError, badRequest, unauthorized, tooManyRequests, unavailable, isRetryable, isRateLimited, isSessionMissing, isVerifierMissing } from './errors.js'
 import { createRoute } from './pipeline.js'
-import { parseEmail, parseExistingPassword, parseNewPassword, parseAuthCode, parseFlowId, parsePurpose } from './validate.js'
+import { parseEmail, parseExistingPassword, parseNewPassword, parseAuthCode, parseFlowId, parsePurpose, parseOAuthProvider } from './validate.js'
 
 const NEXT_AFTER_SIGN_IN = '/app/general'
 const NEXT_AFTER_RECOVERY = '/reset-password'
@@ -13,6 +13,19 @@ function publicUser(user) {
 function throwIfTransient(error) {
   if (isRetryable(error)) throw unavailable()
   if (isRateLimited(error)) throw tooManyRequests()
+}
+
+// The URL we hand to the browser must be this project's own Supabase authorize endpoint and nothing else.
+function supabaseAuthorizeUrl(value, config) {
+  if (typeof value !== 'string') return null
+  let url
+  try {
+    url = new URL(value)
+  } catch {
+    return null
+  }
+  if (url.origin !== new URL(config.supabaseUrl).origin || url.pathname !== '/auth/v1/authorize') return null
+  return url.toString()
 }
 
 export function createRoutes({ getConfig, createSupabase, logger }) {
@@ -81,7 +94,31 @@ export function createRoutes({ getConfig, createSupabase, logger }) {
     return { body: { ok: true } }
   })
 
-  // POST /api/auth/callback: PKCE code exchange for email confirmation and password recovery.
+  // POST /api/auth/oauth: starts a Supabase OAuth (PKCE) sign-in for an allowlisted provider (GitHub).
+  // The browser asks for it with the usual CSRF protections (exact Origin + custom header), the PKCE verifier
+  // is stored in the HttpOnly session cookie jar by the server client, and only the provider authorize URL is
+  // returned. The browser navigates there; the provider returns to Supabase, which returns to
+  // `${origin}/auth/callback/oauth?code=...`, which the callback route below exchanges for a session.
+  // Nothing about the provider (tokens, client secret) ever reaches this code or the browser.
+  const oauth = route({ methods: ['POST'], body: ['provider'] }, async (ctx) => {
+    const provider = parseOAuthProvider(ctx.body.provider)
+    const { supabase } = ctx.supa()
+    const redirectTo = `${ctx.origin}/auth/callback/oauth` // ctx.origin is the validated, allow-listed APP_ORIGINS entry
+    const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo, skipBrowserRedirect: true } })
+    if (error) {
+      ctx.logAuthError('auth.oauth.start_failed', error)
+      throwIfTransient(error)
+      throw badRequest('oauth_failed')
+    }
+    const url = supabaseAuthorizeUrl(data && data.url, ctx.config)
+    if (!url) {
+      ctx.log('auth.oauth.unexpected_authorize_url', {})
+      throw new ApiError(500, 'internal_error')
+    }
+    return { body: { ok: true, url } }
+  })
+
+  // POST /api/auth/callback: PKCE code exchange for email confirmation, password recovery and OAuth sign-in.
   const callback = route({ methods: ['POST'], body: ['code', 'flowId', 'purpose'] }, async (ctx) => {
     const code = parseAuthCode(ctx.body.code)
     const flowId = parseFlowId(ctx.body.flowId)
@@ -131,5 +168,5 @@ export function createRoutes({ getConfig, createSupabase, logger }) {
     return { body: { ok: true } }
   })
 
-  return { session, signin, signup, forgotPassword, callback, resetPassword, signout }
+  return { session, signin, signup, forgotPassword, oauth, callback, resetPassword, signout }
 }
