@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { apiRequest } from './api.js'
 import { wipeAndNavigate } from './localData.js'
 import { safeInternalPath, safeServerNext } from './paths.js'
+import { startOAuthRequest } from './oauth.js'
 
 const AuthContext = createContext(null)
 
@@ -57,6 +58,13 @@ export function AuthProvider({ children }) {
 
   const signUp = useCallback((email, password) => apiRequest('/api/auth/signup', { method: 'POST', body: { email, password } }), [])
 
+  // Starts "Continue with <provider>" (GitHub). On success the browser navigates away to the provider, so there is
+  // nothing to wipe or navigate here; the return trip lands on /auth/callback/oauth (see completeCallback).
+  const startOAuth = useCallback(
+    (provider) => startOAuthRequest(provider, { request: apiRequest, assign: (url) => window.location.assign(url) }),
+    []
+  )
+
   const forgotPassword = useCallback((email) => apiRequest('/api/auth/forgot-password', { method: 'POST', body: { email } }), [])
 
   const completeCallback = useCallback(async ({ code, flowId, purpose }) => {
@@ -77,8 +85,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ ...state, refresh, signIn, signUp, forgotPassword, completeCallback, resetPassword, signOut }),
-    [state, refresh, signIn, signUp, forgotPassword, completeCallback, resetPassword, signOut]
+    () => ({ ...state, refresh, signIn, signUp, startOAuth, forgotPassword, completeCallback, resetPassword, signOut }),
+    [state, refresh, signIn, signUp, startOAuth, forgotPassword, completeCallback, resetPassword, signOut]
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

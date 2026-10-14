@@ -45,8 +45,17 @@ export function parseFlowId(value) {
 
 export function parsePurpose(value) {
   if (value === undefined || value === null) return null
-  if (value === 'recovery' || value === 'signup') return value
+  if (value === 'recovery' || value === 'signup' || value === 'oauth') return value
   throw badRequest()
+}
+
+// Only providers Ombre has deliberately enabled. Adding one (for example 'google') is a one-word change here
+// plus enabling it in the Supabase dashboard.
+export const OAUTH_PROVIDERS = Object.freeze(['github'])
+
+export function parseOAuthProvider(value) {
+  if (typeof value !== 'string' || !OAUTH_PROVIDERS.includes(value)) throw badRequest()
+  return value
 }
 
 // A display name is a trimmed single line of 1..100 characters, or null (cleared).
