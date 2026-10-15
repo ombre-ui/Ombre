@@ -49,9 +49,9 @@ export function parsePurpose(value) {
   throw badRequest()
 }
 
-// Only providers Ombre has deliberately enabled. Adding one (for example 'google') is a one-word change here
-// plus enabling it in the Supabase dashboard.
-export const OAUTH_PROVIDERS = Object.freeze(['github'])
+// Only providers Ombre has deliberately enabled. Adding one is a one-word change here (and in
+// src/lib/auth/oauth.js) plus enabling it in the Supabase dashboard.
+export const OAUTH_PROVIDERS = Object.freeze(['github', 'google'])
 
 export function parseOAuthProvider(value) {
   if (typeof value !== 'string' || !OAUTH_PROVIDERS.includes(value)) throw badRequest()

@@ -15,6 +15,10 @@ function throwIfTransient(error) {
   if (isRateLimited(error)) throw tooManyRequests()
 }
 
+// Extra authorization parameters per provider. Server-controlled constants: the browser can never supply them.
+// Google: always show Google's own account chooser instead of silently reusing whichever account is signed in.
+const OAUTH_QUERY_PARAMS = Object.freeze({ google: Object.freeze({ prompt: 'select_account' }) })
+
 // The URL we hand to the browser must be this project's own Supabase authorize endpoint and nothing else.
 function supabaseAuthorizeUrl(value, config) {
   if (typeof value !== 'string') return null
@@ -94,7 +98,7 @@ export function createRoutes({ getConfig, createSupabase, logger }) {
     return { body: { ok: true } }
   })
 
-  // POST /api/auth/oauth: starts a Supabase OAuth (PKCE) sign-in for an allowlisted provider (GitHub).
+  // POST /api/auth/oauth: starts a Supabase OAuth (PKCE) sign-in for an allowlisted provider (GitHub, Google).
   // The browser asks for it with the usual CSRF protections (exact Origin + custom header), the PKCE verifier
   // is stored in the HttpOnly session cookie jar by the server client, and only the provider authorize URL is
   // returned. The browser navigates there; the provider returns to Supabase, which returns to
@@ -104,7 +108,9 @@ export function createRoutes({ getConfig, createSupabase, logger }) {
     const provider = parseOAuthProvider(ctx.body.provider)
     const { supabase } = ctx.supa()
     const redirectTo = `${ctx.origin}/auth/callback/oauth` // ctx.origin is the validated, allow-listed APP_ORIGINS entry
-    const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo, skipBrowserRedirect: true } })
+    const options = { redirectTo, skipBrowserRedirect: true }
+    if (OAUTH_QUERY_PARAMS[provider]) options.queryParams = { ...OAUTH_QUERY_PARAMS[provider] }
+    const { data, error } = await supabase.auth.signInWithOAuth({ provider, options })
     if (error) {
       ctx.logAuthError('auth.oauth.start_failed', error)
       throwIfTransient(error)
