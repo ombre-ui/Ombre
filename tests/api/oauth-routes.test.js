@@ -46,7 +46,7 @@ test('local development uses the local origin and an insecure-cookie-capable con
 })
 
 test('only allow-listed providers are accepted; unknown keys and bad shapes are 400 and never reach Supabase', async () => {
-  for (const body of [{ provider: 'google' }, { provider: 'GitHub' }, { provider: '' }, { provider: 5 }, { provider: null }, {}, { provider: 'github', redirectTo: 'https://evil.example' }, { provider: 'github', scopes: 'repo' }]) {
+  for (const body of [{ provider: 'facebook' }, { provider: 'Google' }, { provider: 'GitHub' }, { provider: '' }, { provider: 5 }, { provider: null }, {}, { provider: 'github', redirectTo: 'https://evil.example' }, { provider: 'github', scopes: 'repo' }]) {
     const calls = []
     const { routes } = buildRoutes({ auth: okAuth(calls) })
     const res = await routes.oauth(start(body))

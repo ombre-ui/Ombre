@@ -5,8 +5,8 @@ import { isSafeAuthorizeUrl, startOAuthRequest, classifyReturn, OAUTH_PROVIDERS 
 const GOOD = 'https://abc.supabase.co/auth/v1/authorize?provider=github&code_challenge=x'
 const q = (s) => new URLSearchParams(s)
 
-test('only github is offered', () => {
-  assert.deepEqual(OAUTH_PROVIDERS, ['github'])
+test('github and google are offered, nothing else', () => {
+  assert.deepEqual(OAUTH_PROVIDERS, ['github', 'google'])
 })
 
 test('isSafeAuthorizeUrl: https Supabase authorize URLs, and http only on localhost', () => {
@@ -43,10 +43,23 @@ test('startOAuthRequest never navigates on failure, an unsafe URL or an unknown 
   const none = await startOAuthRequest('github', { request: async () => ({ ok: true, status: 200, data: {} }), assign })
   assert.equal(none.ok, false)
   let called = false
-  const unknown = await startOAuthRequest('google', { request: async () => { called = true; return { ok: true } }, assign })
+  const unknown = await startOAuthRequest('facebook', { request: async () => { called = true; return { ok: true } }, assign })
   assert.equal(unknown.ok, false)
   assert.equal(called, false)
   assert.deepEqual(nav, [])
+})
+
+test('startOAuthRequest works for google exactly like github', async () => {
+  const seen = []
+  const nav = []
+  const url = 'https://abc.supabase.co/auth/v1/authorize?provider=google&code_challenge=x'
+  const result = await startOAuthRequest('google', {
+    request: async (path, opts) => { seen.push([path, opts]); return { ok: true, status: 200, data: { ok: true, url } } },
+    assign: (u) => nav.push(u),
+  })
+  assert.equal(result.ok, true)
+  assert.deepEqual(seen, [['/api/auth/oauth', { method: 'POST', body: { provider: 'google' } }]])
+  assert.deepEqual(nav, [url])
 })
 
 test('classifyReturn: a code, a cancellation, expired state and other failures', () => {
