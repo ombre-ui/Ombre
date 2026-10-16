@@ -58,6 +58,21 @@ export function parseOAuthProvider(value) {
   return value
 }
 
+export const RESET_CODE_LENGTH = 7
+
+export function parseResetAction(value) {
+  if (value === 'request' || value === 'verify') return value
+  throw badRequest()
+}
+
+// A pasted code may carry spaces or dashes ("123 4567"); everything else must be exactly 7 digits.
+export function parseResetCode(value) {
+  if (typeof value !== 'string') throw badRequest('reset_code_invalid')
+  const digits = value.replace(/[\s-]/g, '')
+  if (!/^\d+$/.test(digits) || digits.length !== RESET_CODE_LENGTH) throw badRequest('reset_code_invalid')
+  return digits
+}
+
 // A display name is a trimmed single line of 1..100 characters, or null (cleared).
 // Empty or whitespace-only input clears the name. Length is counted in characters (code points),
 // matching Postgres char_length, not UTF-16 units.
