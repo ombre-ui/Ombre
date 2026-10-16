@@ -32,7 +32,7 @@ export default function ResetPasswordPage() {
         <Field id="reset-confirm" label="Confirm new password" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
         <FormError message={error} />
         <button type="submit" className="auth-btn-primary motion-interactive" disabled={busy || !password || !confirm}>
-          {busy ? 'Saving…' : 'Update password'}
+          {busy ? 'Resetting…' : 'Reset password'}
         </button>
       </form>
     </AuthLayout>

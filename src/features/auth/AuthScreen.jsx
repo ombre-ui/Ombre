@@ -146,6 +146,13 @@ export default function AuthScreen({ mode = 'signin' }) {
               type="password"
               autoComplete={isSignup ? 'new-password' : 'current-password'}
               hint={isSignup ? 'At least 12 characters.' : undefined}
+              labelAction={
+                isSignup ? undefined : (
+                  <Link to="/forgot-password" className="auth-forgot-link">
+                    Forgot password?
+                  </Link>
+                )
+              }
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -157,11 +164,6 @@ export default function AuthScreen({ mode = 'signin' }) {
             <button type="submit" className="auth-btn-primary motion-interactive" disabled={!canSubmit(mode, { email, password, confirm }, anyBusy)}>
               {busy ? copy.busy : copy.submit}
             </button>
-            {!isSignup && (
-              <Link to="/forgot-password" className="auth-link text-body-sm">
-                Forgot your password?
-              </Link>
-            )}
           </form>
         </section>
       )}

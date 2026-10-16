@@ -5,6 +5,7 @@ const MESSAGES = {
   rate_limited: 'Too many attempts. Wait a moment and try again.',
   weak_password: 'Use at least 12 characters.',
   password_mismatch: 'The passwords don’t match.',
+  reset_code_invalid: 'That code isn’t right, or it has expired. Check it, or request a new one.',
   same_password: 'Choose a password you haven’t used before.',
   recent_login_required: 'For security, sign in again, then retry.',
   invalid_request: 'Check the details you entered and try again.',

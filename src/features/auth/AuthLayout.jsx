@@ -14,12 +14,21 @@ export default function AuthLayout({ title, subtitle, children, footer }) {
   )
 }
 
-export function Field({ id, label, hint, ...inputProps }) {
+export function Field({ id, label, hint, labelAction, ...inputProps }) {
   return (
     <div className="auth-field">
-      <label className="text-label" htmlFor={id}>
-        {label}
-      </label>
+      {labelAction ? (
+        <div className="auth-label-row">
+          <label className="text-label" htmlFor={id}>
+            {label}
+          </label>
+          {labelAction}
+        </div>
+      ) : (
+        <label className="text-label" htmlFor={id}>
+          {label}
+        </label>
+      )}
       <input id={id} className="auth-input text-body" {...inputProps} />
       {hint && <span className="text-body-sm text-secondary">{hint}</span>}
     </div>
