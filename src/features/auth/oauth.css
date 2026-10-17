@@ -1,10 +1,17 @@
-/* "Continue with <provider>" controls on the sign-in screen. Design tokens only. */
+/* Sign-in / create-account screen: OAuth buttons, email reveal and divider. Design tokens only. */
+
+.auth-oauth-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
 
 .auth-divider {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  margin: var(--space-4) 0;
+  margin: var(--space-5) 0 var(--space-4);
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
@@ -14,6 +21,10 @@
   flex: 1;
   height: 1px;
   background: var(--border);
+}
+
+.auth-email-heading {
+  margin: 0 0 var(--space-3);
 }
 
 .auth-btn-oauth {
@@ -35,6 +46,52 @@
   background: var(--surface-elevated);
 }
 .auth-btn-oauth:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Visual hierarchy: Google (primary) > GitHub (secondary) > email (fallback). */
+.auth-btn-oauth--primary {
+  background: var(--surface-elevated);
+  border: 2px solid var(--text-primary);
+  font-weight: 600;
+}
+.auth-btn-oauth--secondary {
+  border-color: var(--border-strong);
+}
+.auth-btn-oauth--email {
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+/* Password label row with a small, subtle "Forgot password?" link. */
+.auth-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.auth-forgot-link {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.auth-forgot-link:hover,
+.auth-forgot-link:focus-visible {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+/* A text-link styled button (resend / use a different email). */
+.auth-link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  align-self: flex-start;
+  font-family: inherit;
+}
+.auth-link-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

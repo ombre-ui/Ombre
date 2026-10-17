@@ -1,7 +1,7 @@
 // Pure helpers for "Continue with <provider>". No tokens, secrets or storage: the server starts the Supabase OAuth
 // (PKCE) flow and the browser only receives the provider authorize URL, then later a one-time `code`.
 
-export const OAUTH_PROVIDERS = ['github']
+export const OAUTH_PROVIDERS = ['github', 'google']
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 

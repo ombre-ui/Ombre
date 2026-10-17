@@ -77,6 +77,9 @@ export function createCookieJar({ request, config }) {
       for (const { name } of requestCookies) {
         if (ownsName(name)) pending.set(name, { value: '', maxAge: 0 })
       }
+      // Also cancel anything written earlier in this same request (for example a session that was established
+      // and then refused), so it can never reach the browser.
+      for (const name of Array.from(pending.keys())) pending.set(name, { value: '', maxAge: 0 })
     },
 
     setCookieHeaders() {

@@ -49,13 +49,28 @@ export function parsePurpose(value) {
   throw badRequest()
 }
 
-// Only providers Ombre has deliberately enabled. Adding one (for example 'google') is a one-word change here
-// plus enabling it in the Supabase dashboard.
-export const OAUTH_PROVIDERS = Object.freeze(['github'])
+// Only providers Ombre has deliberately enabled. Adding one is a one-word change here (and in
+// src/lib/auth/oauth.js) plus enabling it in the Supabase dashboard.
+export const OAUTH_PROVIDERS = Object.freeze(['github', 'google'])
 
 export function parseOAuthProvider(value) {
   if (typeof value !== 'string' || !OAUTH_PROVIDERS.includes(value)) throw badRequest()
   return value
+}
+
+export const RESET_CODE_LENGTH = 7
+
+export function parseResetAction(value) {
+  if (value === 'request' || value === 'verify') return value
+  throw badRequest()
+}
+
+// A pasted code may carry spaces or dashes ("123 4567"); everything else must be exactly 7 digits.
+export function parseResetCode(value) {
+  if (typeof value !== 'string') throw badRequest('reset_code_invalid')
+  const digits = value.replace(/[\s-]/g, '')
+  if (!/^\d+$/.test(digits) || digits.length !== RESET_CODE_LENGTH) throw badRequest('reset_code_invalid')
+  return digits
 }
 
 // A display name is a trimmed single line of 1..100 characters, or null (cleared).
