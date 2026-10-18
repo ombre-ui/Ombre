@@ -28,13 +28,26 @@ async function readBody(request) {
   return text
 }
 
+// Which JSON keys a request may carry. options.body is either
+//   - an array of keys: every method of the route takes a JSON body with exactly those keys (A2 routes), or
+//   - an object keyed by method ({ PATCH: ['displayName'] }): only the listed methods take a JSON body,
+//     all other methods (GET) are bodyless, or
+//   - null/undefined: no body.
+function allowedKeysFor(bodyOption, method) {
+  if (Array.isArray(bodyOption)) return bodyOption
+  if (bodyOption && typeof bodyOption === 'object' && Object.prototype.hasOwnProperty.call(bodyOption, method)) {
+    return bodyOption[method]
+  }
+  return null
+}
+
 // Builds a route: (Request) => Promise<Response>.
 //   options.methods   allowed methods (others -> 405)
-//   options.body      array of allowed JSON keys, or null for routes without a body
+//   options.body      see allowedKeysFor
 //   fn(ctx)           returns { status?, body } or throws ApiError
 export function createRoute({ getConfig, createSupabase, logger }, options, fn) {
   const methods = options.methods
-  const allowedKeys = options.body ?? null
+  const bodyOption = options.body ?? null
 
   return async function route(request) {
     const started = Date.now()
@@ -52,6 +65,7 @@ export function createRoute({ getConfig, createSupabase, logger }, options, fn) 
       const config = getConfig()
       const origin = checkRequestOrigin(request, config)
 
+      const allowedKeys = allowedKeysFor(bodyOption, request.method)
       let body
       if (allowedKeys) {
         const type = (request.headers.get('content-type') || '').toLowerCase()

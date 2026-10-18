@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
+import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import MemoryItemCard from './MemoryItemCard.jsx'
 import './memory.css'
 
@@ -29,6 +30,8 @@ export default function MemoryPage() {
           What Ombre remembers, kept in plain view so you can review or remove anything, anytime.
         </p>
       </header>
+
+      <PreviewNotice />
 
       {adding ? (
         <div className="memory-add-form motion-settle">

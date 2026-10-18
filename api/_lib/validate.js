@@ -3,10 +3,13 @@ import { badRequest } from './errors.js'
 export const PASSWORD_MIN_LENGTH = 12
 export const PASSWORD_MAX_BYTES = 72 // bcrypt limit used by Supabase Auth
 export const EMAIL_MAX_LENGTH = 254
+export const DISPLAY_NAME_MAX_LENGTH = 100 // characters; mirrors the profiles.display_name check constraint
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/
 const CODE_RE = /^[A-Za-z0-9._~-]{8,256}$/
 const FLOW_ID_RE = /^[A-Za-z0-9_-]{8,64}$/
+// C0/C1 control characters plus line/paragraph separators: a display name is one line of plain text.
+const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/
 
 export function parseEmail(value) {
   if (typeof value !== 'string') throw badRequest()
@@ -42,8 +45,45 @@ export function parseFlowId(value) {
 
 export function parsePurpose(value) {
   if (value === undefined || value === null) return null
-  if (value === 'recovery' || value === 'signup') return value
+  if (value === 'recovery' || value === 'signup' || value === 'oauth') return value
   throw badRequest()
+}
+
+// Only providers Ombre has deliberately enabled. Adding one is a one-word change here (and in
+// src/lib/auth/oauth.js) plus enabling it in the Supabase dashboard.
+export const OAUTH_PROVIDERS = Object.freeze(['github', 'google'])
+
+export function parseOAuthProvider(value) {
+  if (typeof value !== 'string' || !OAUTH_PROVIDERS.includes(value)) throw badRequest()
+  return value
+}
+
+export const RESET_CODE_LENGTH = 7
+
+export function parseResetAction(value) {
+  if (value === 'request' || value === 'verify') return value
+  throw badRequest()
+}
+
+// A pasted code may carry spaces or dashes ("123 4567"); everything else must be exactly 7 digits.
+export function parseResetCode(value) {
+  if (typeof value !== 'string') throw badRequest('reset_code_invalid')
+  const digits = value.replace(/[\s-]/g, '')
+  if (!/^\d+$/.test(digits) || digits.length !== RESET_CODE_LENGTH) throw badRequest('reset_code_invalid')
+  return digits
+}
+
+// A display name is a trimmed single line of 1..100 characters, or null (cleared).
+// Empty or whitespace-only input clears the name. Length is counted in characters (code points),
+// matching Postgres char_length, not UTF-16 units.
+export function parseDisplayName(value) {
+  if (value === null) return null
+  if (typeof value !== 'string') throw badRequest()
+  const name = value.normalize('NFC').trim()
+  if (name === '') return null
+  if (CONTROL_CHARS_RE.test(name)) throw badRequest()
+  if (Array.from(name).length > DISPLAY_NAME_MAX_LENGTH) throw badRequest()
+  return name
 }
 
 export function parseJsonObject(text, allowedKeys) {

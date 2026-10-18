@@ -39,6 +39,7 @@ export default function Sidebar({
   isMobile,
   theme,
   onToggleTheme,
+  themeDisabled = false,
 }) {
   return (
     <>
@@ -91,6 +92,7 @@ export default function Sidebar({
               <button
                 className="sidebar-link motion-interactive"
                 onClick={onToggleTheme}
+                disabled={themeDisabled}
                 title={collapsed ? (theme === 'dark' ? 'Light mode' : 'Dark mode') : undefined}
                 aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
               >

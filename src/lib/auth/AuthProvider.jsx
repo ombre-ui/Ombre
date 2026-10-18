@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { apiRequest } from './api.js'
 import { wipeAndNavigate } from './localData.js'
 import { safeInternalPath, safeServerNext } from './paths.js'
+import { startOAuthRequest } from './oauth.js'
 
 const AuthContext = createContext(null)
 
@@ -57,6 +58,22 @@ export function AuthProvider({ children }) {
 
   const signUp = useCallback((email, password) => apiRequest('/api/auth/signup', { method: 'POST', body: { email, password } }), [])
 
+  // Starts "Continue with <provider>" (GitHub, Google). On success the browser navigates away to the provider, so
+  // there is nothing to wipe or navigate here; the return trip lands on /auth/callback/oauth (see completeCallback).
+  const startOAuth = useCallback(
+    (provider) => startOAuthRequest(provider, { request: apiRequest, assign: (url) => window.location.assign(url) }),
+    []
+  )
+
+  // Password reset by 7-digit code (Supabase recovery OTP behind POST /api/auth/reset-code).
+  const requestResetCode = useCallback((email) => apiRequest('/api/auth/reset-code', { method: 'POST', body: { action: 'request', email } }), [])
+
+  const verifyResetCode = useCallback(async (email, code) => {
+    const result = await apiRequest('/api/auth/reset-code', { method: 'POST', body: { action: 'verify', email, code } })
+    if (result.ok) wipeAndNavigate(safeServerNext(result.data && result.data.next)) // the session cookie is already set
+    return result
+  }, [])
+
   const forgotPassword = useCallback((email) => apiRequest('/api/auth/forgot-password', { method: 'POST', body: { email } }), [])
 
   const completeCallback = useCallback(async ({ code, flowId, purpose }) => {
@@ -77,8 +94,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ ...state, refresh, signIn, signUp, forgotPassword, completeCallback, resetPassword, signOut }),
-    [state, refresh, signIn, signUp, forgotPassword, completeCallback, resetPassword, signOut]
+    () => ({ ...state, refresh, signIn, signUp, startOAuth, forgotPassword, requestResetCode, verifyResetCode, completeCallback, resetPassword, signOut }),
+    [state, refresh, signIn, signUp, startOAuth, forgotPassword, requestResetCode, verifyResetCode, completeCallback, resetPassword, signOut]
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

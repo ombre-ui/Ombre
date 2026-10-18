@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { useOmbreData } from '../../lib/store.jsx'
+import { useUserState } from '../../lib/user/UserStateProvider.jsx'
 import { useAuth } from '../../lib/auth/AuthProvider.jsx'
+import StatePanel from '../../lib/user/StatePanel.jsx'
 import SettingsToggle from './SettingsToggle.jsx'
 import SettingsSegmented from './SettingsSegmented.jsx'
 import './settings.css'
@@ -21,24 +22,14 @@ function scrollToSection(id, behavior = 'smooth') {
 }
 
 export default function SettingsPage() {
-  const {
-    theme,
-    toggleTheme,
-    getSettings,
-    updateSettings,
-    getProfile,
-    listConversations,
-    clearAllConversations,
-    listMemoryItems,
-    clearAllMemory,
-  } = useOmbreData()
+  const { settings, profile, updateSettings, reload } = useUserState()
   const { hash } = useLocation()
   const { user, signOut } = useAuth()
-
-  const settings = getSettings()
-  const profile = getProfile()
-  const memoryCount = listMemoryItems().length
   const [toast, setToast] = useState(null)
+
+  const ready = settings.status === 'ready'
+  const values = ready ? settings.data : null
+  const accountName = profile.status === 'ready' ? profile.data.displayName : null
 
   // Deep links like /app/settings#ai (used from Profile) should land on that
   // section. Router navigation doesn't scroll to hashes by itself.
@@ -46,41 +37,29 @@ export default function SettingsPage() {
     if (hash) scrollToSection(hash.slice(1), 'auto')
   }, [hash])
 
-  function patchSection(section, patch) {
-    updateSettings({ [section]: { ...settings[section], ...patch } })
+  function showToast(message, ms = 2400) {
+    setToast(message)
+    window.setTimeout(() => setToast(null), ms)
   }
 
-  function handleClearConversations() {
-    if (listConversations().length === 0) return
-    if (window.confirm('Clear all conversations? This only affects the local demo data on this device.')) {
-      clearAllConversations()
-      setToast('Conversations cleared')
-      window.setTimeout(() => setToast(null), 1800)
-    }
-  }
-
-  function handleClearMemory() {
-    if (listMemoryItems().length === 0) return
-    if (window.confirm('Clear everything Ombre remembers? This only affects the local demo data on this device.')) {
-      clearAllMemory()
-      setToast('Memory cleared')
-      window.setTimeout(() => setToast(null), 1800)
-    }
+  // Optimistic, server-confirmed save. On failure the control reverts by itself and we say so.
+  async function patchSection(section, patch) {
+    const result = await updateSettings({ [section]: patch })
+    if (!result.ok) showToast('Couldn’t save that change. Your setting wasn’t changed.')
   }
 
   async function handleSignOut() {
     const result = await signOut()
-    if (!result.ok) {
-      setToast('Couldn’t sign out. Check your connection and try again.')
-      window.setTimeout(() => setToast(null), 2400)
-    }
+    if (!result.ok) showToast('Couldn’t sign out. Check your connection and try again.')
   }
+
+  const unavailable = <StatePanel status={settings.status} what="your settings" onRetry={() => reload('settings')} />
 
   return (
     <div className="settings-page motion-reveal">
       <header className="settings-header">
         <h1 className="text-heading-lg">Settings</h1>
-        <p className="text-body text-secondary">Every control here is local to this device for now.</p>
+        <p className="text-body text-secondary">Your preferences are saved to your account.</p>
       </header>
 
       <nav className="settings-nav" aria-label="Settings sections">
@@ -101,23 +80,30 @@ export default function SettingsPage() {
         <h2 className="text-heading-sm">General</h2>
         <p className="text-body-sm text-secondary settings-section-intro">Appearance and interface.</p>
 
-        <SettingsSegmented
-          label="Theme"
-          value={theme}
-          onChange={(v) => v !== theme && toggleTheme()}
-          options={[
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
-          ]}
-        />
+        {ready ? (
+          <>
+            <SettingsSegmented
+              label="Theme"
+              value={values.general.theme}
+              onChange={(v) => patchSection('general', { theme: v })}
+              options={[
+                { value: 'system', label: 'System' },
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' },
+              ]}
+            />
 
-        <SettingsToggle
-          label="Reduce motion"
-          description="Ombre already respects your system's reduced-motion setting. An in-app override is coming soon."
-          checked={false}
-          onChange={() => {}}
-          disabled
-        />
+            <SettingsToggle
+              label="Reduce motion"
+              description="Ombre already respects your system's reduced-motion setting. An in-app override is coming soon."
+              checked={false}
+              onChange={() => {}}
+              disabled
+            />
+          </>
+        ) : (
+          unavailable
+        )}
       </section>
 
       {/* ---- Notifications ---- */}
@@ -127,18 +113,24 @@ export default function SettingsPage() {
           Nothing sends yet — these set your preference for when notifications are built.
         </p>
 
-        <SettingsToggle
-          label="Email notifications"
-          description="Summaries and updates by email."
-          checked={settings.notifications.email}
-          onChange={(v) => patchSection('notifications', { email: v })}
-        />
-        <SettingsToggle
-          label="In-app notifications"
-          description="Let a mentor's reply notify you inside Ombre."
-          checked={settings.notifications.inApp}
-          onChange={(v) => patchSection('notifications', { inApp: v })}
-        />
+        {ready ? (
+          <>
+            <SettingsToggle
+              label="Email notifications"
+              description="Summaries and updates by email."
+              checked={values.notifications.email}
+              onChange={(v) => patchSection('notifications', { email: v })}
+            />
+            <SettingsToggle
+              label="In-app notifications"
+              description="Let a mentor's reply notify you inside Ombre."
+              checked={values.notifications.inApp}
+              onChange={(v) => patchSection('notifications', { inApp: v })}
+            />
+          </>
+        ) : (
+          unavailable
+        )}
       </section>
 
       {/* ---- Privacy ---- */}
@@ -146,15 +138,24 @@ export default function SettingsPage() {
         <h2 className="text-heading-sm">Privacy</h2>
         <p className="text-body-sm text-secondary settings-section-intro">Data and conversation controls.</p>
 
-        <SettingsToggle
-          label="Save conversation history"
-          description="Keep conversations in History after you leave them."
-          checked={settings.privacy.saveHistory}
-          onChange={(v) => patchSection('privacy', { saveHistory: v })}
-        />
+        {ready ? (
+          <SettingsToggle
+            label="Save conversation history"
+            description="Keep conversations in History after you leave them. Saving conversations to your account isn’t built yet; this stores your preference."
+            checked={values.privacy.saveHistory}
+            onChange={(v) => patchSection('privacy', { saveHistory: v })}
+          />
+        ) : (
+          unavailable
+        )}
 
         <div className="settings-danger-row">
-          <button type="button" className="settings-danger-btn motion-interactive" onClick={handleClearConversations}>
+          <button
+            type="button"
+            className="settings-danger-btn"
+            disabled
+            title="Available once conversations are saved to your account"
+          >
             Clear all conversations
           </button>
         </div>
@@ -164,24 +165,31 @@ export default function SettingsPage() {
       <section id="memory" className="settings-section">
         <h2 className="text-heading-sm">Memory</h2>
         <p className="text-body-sm text-secondary settings-section-intro">
-          {memoryCount === 0
-            ? 'Nothing remembered yet.'
-            : `${memoryCount} item${memoryCount === 1 ? '' : 's'} remembered.`}{' '}
+          Memory isn’t connected to your account yet.{' '}
           <Link to="/app/memory" className="settings-link-active">
             View Memory
           </Link>
-          . Ombre doesn't extract memory automatically yet — everything there was added by hand.
+          . Ombre doesn't extract memory automatically yet.
         </p>
 
-        <SettingsToggle
-          label="Remember context across conversations"
-          description="Allow General AI and mentors to use Memory when responding."
-          checked={settings.privacy.rememberContext}
-          onChange={(v) => patchSection('privacy', { rememberContext: v })}
-        />
+        {ready ? (
+          <SettingsToggle
+            label="Remember context across conversations"
+            description="Allow General AI and mentors to use Memory when responding. Stores your preference for when Memory is built."
+            checked={values.privacy.rememberContext}
+            onChange={(v) => patchSection('privacy', { rememberContext: v })}
+          />
+        ) : (
+          unavailable
+        )}
 
         <div className="settings-danger-row">
-          <button type="button" className="settings-danger-btn motion-interactive" onClick={handleClearMemory}>
+          <button
+            type="button"
+            className="settings-danger-btn"
+            disabled
+            title="Available once Memory is saved to your account"
+          >
             Clear everything Ombre remembers
           </button>
         </div>
@@ -191,38 +199,44 @@ export default function SettingsPage() {
       <section id="ai" className="settings-section">
         <h2 className="text-heading-sm">AI &amp; Personalization</h2>
         <p className="text-body-sm text-secondary settings-section-intro">
-          How General AI and mentors respond to you. Individual mentor behavior is configured separately and isn’t
-          part of this yet.
+          How General AI and mentors will respond to you. Individual mentor behavior is configured separately and
+          isn’t part of this yet.
         </p>
 
-        <SettingsSegmented
-          label="Response style"
-          value={settings.ai.responseStyle}
-          onChange={(v) => patchSection('ai', { responseStyle: v })}
-          options={[
-            { value: 'concise', label: 'Concise' },
-            { value: 'balanced', label: 'Balanced' },
-            { value: 'detailed', label: 'Detailed' },
-          ]}
-        />
-        <SettingsToggle
-          label="Use my name in responses"
-          checked={settings.ai.useNameInResponses}
-          onChange={(v) => patchSection('ai', { useNameInResponses: v })}
-        />
-        <SettingsToggle
-          label="Suggest mentors based on context"
-          description="Let Ombre point toward a specialized mentor when a conversation fits one."
-          checked={settings.ai.suggestMentors}
-          onChange={(v) => patchSection('ai', { suggestMentors: v })}
-        />
+        {ready ? (
+          <>
+            <SettingsSegmented
+              label="Response style"
+              value={values.ai.responseStyle}
+              onChange={(v) => patchSection('ai', { responseStyle: v })}
+              options={[
+                { value: 'concise', label: 'Concise' },
+                { value: 'balanced', label: 'Balanced' },
+                { value: 'detailed', label: 'Detailed' },
+              ]}
+            />
+            <SettingsToggle
+              label="Use my name in responses"
+              checked={values.ai.useNameInResponses}
+              onChange={(v) => patchSection('ai', { useNameInResponses: v })}
+            />
+            <SettingsToggle
+              label="Suggest mentors based on context"
+              description="Let Ombre point toward a specialized mentor when a conversation fits one."
+              checked={values.ai.suggestMentors}
+              onChange={(v) => patchSection('ai', { suggestMentors: v })}
+            />
+          </>
+        ) : (
+          unavailable
+        )}
       </section>
 
       {/* ---- Account ---- */}
       <section id="account" className="settings-section">
         <h2 className="text-heading-sm">Account</h2>
         <p className="text-body-sm text-secondary settings-section-intro">
-          {profile?.name || 'No name set'} · {user?.email || 'No email'}
+          {accountName || 'No name set'} · {user?.email || 'No email'}
         </p>
 
         <div className="settings-danger-row">
@@ -260,7 +274,7 @@ export default function SettingsPage() {
 
         <p className="text-body-sm text-secondary settings-disclaimer">
           <strong>AI disclaimer:</strong> General AI and mentor conversations are not yet connected to a real
-          reasoning model. Responses you see right now are placeholders that demonstrate the interface only.
+          reasoning model. Responses you see right now are demo placeholders that exercise the interface only.
         </p>
       </section>
 

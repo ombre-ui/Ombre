@@ -1,9 +1,10 @@
 import { RotateCcw } from 'lucide-react'
 import './general-ai.css'
+import '../../layout/PreviewNotice.css'
 
 function PendingDots() {
   return (
-    <span className="message-pending" role="status" aria-label="Ombre is thinking">
+    <span className="message-pending" role="status" aria-label="Preparing a demo response">
       <span className="message-pending-dot" />
       <span className="message-pending-dot" />
       <span className="message-pending-dot" />
@@ -35,7 +36,10 @@ export default function MessageBubble({ message, grouped, onRetry }) {
           </button>
         </div>
       ) : (
-        <div className="message-assistant-text text-body motion-reveal">{message.content}</div>
+        <div className="message-assistant-text text-body motion-reveal">
+          {message.demo && <span className="message-demo-tag text-meta">Demo response</span>}
+          <div>{message.content}</div>
+        </div>
       )}
     </div>
   )

@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
+import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import { getMentorWithPath } from '../mentors/categories.js'
 import './history.css'
 
 const BUCKET_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older']
 
 const STATUS_LABEL = {
-  pending: 'Ombre is still responding',
+  pending: 'A demo reply is still pending',
   error: 'The last response failed',
 }
 
@@ -71,6 +72,8 @@ export default function HistoryPage() {
         <h1 className="text-heading-lg">History</h1>
         <p className="text-body text-secondary">Where your thinking has been.</p>
       </header>
+
+      <PreviewNotice kind="history" />
 
       <div className="history-search">
         <Search size={16} strokeWidth={1.75} aria-hidden="true" />
