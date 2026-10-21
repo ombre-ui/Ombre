@@ -41,11 +41,17 @@ export function matchPath(pathname, template) {
   return params
 }
 
+// Query parameters that Vercel's platform rewrite (vercel.json: /api/:__vf(...)/:__vp* -> /api/workspace) may append
+// to a request. They are not client input and carry nothing the routes use (the original path is preserved), so
+// they are ignored instead of tripping the unknown-parameter rule. Everything else is still strict.
+export const PLATFORM_REWRITE_PARAMS = Object.freeze(['__vf', '__vp'])
+
 // spec: { name: (rawString) => parsedValue }. Parameters that are absent are simply not in the result.
 export function parseQuery(url, spec) {
   const out = {}
   const seen = new Set()
   for (const name of url.searchParams.keys()) {
+    if (PLATFORM_REWRITE_PARAMS.includes(name)) continue
     if (seen.has(name)) throw badRequest() // repeated parameter
     seen.add(name)
     if (!Object.prototype.hasOwnProperty.call(spec, name)) throw badRequest() // unknown parameter
