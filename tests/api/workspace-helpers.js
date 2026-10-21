@@ -1,4 +1,5 @@
 import { createWorkspaceRoutes } from '../../api/_lib/workspaceRoutes.js'
+import { createWorkspaceDispatcher } from '../../api/_lib/workspaceDispatch.js'
 import { prodConfig, memoryLogger } from './helpers.js'
 
 export const USER = '8a1d2c3e-4b5f-4a6b-9c7d-0e1f2a3b4c5d'
@@ -43,14 +44,17 @@ export function fakeSupabase({ user = { id: USER }, authError = null, handler })
   return { supabase, calls }
 }
 
+// Builds the nine routes plus the dispatcher (routes.workspace) exactly as api/_lib/real.js does.
 export function buildWorkspace(options) {
   const { lines, logger } = memoryLogger()
   const fake = fakeSupabase(options)
-  const routes = createWorkspaceRoutes({
+  const deps = {
     getConfig: () => prodConfig(),
     createSupabase: () => ({ supabase: fake.supabase, jar: null }),
     logger,
-  })
+  }
+  const resources = createWorkspaceRoutes(deps)
+  const routes = { ...resources, workspace: createWorkspaceDispatcher(deps, resources) }
   return { routes, lines, calls: fake.calls }
 }
 
