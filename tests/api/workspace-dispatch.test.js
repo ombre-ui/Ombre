@@ -143,7 +143,7 @@ test('through the Node adapter each route still enforces its own body limit', as
 
 // The Hobby plan allows 12 serverless functions per deployment. Vercel makes one function per file under api/
 // (files and directories starting with "_" are ignored). This guard fails the unit tests, long before a deploy,
-// if the count would exceed the limit, and pins the A4 packaging.
+// if the count would exceed the limit, and pins the A4 packaging (one function, reached through rewrites).
 const API_DIR = fileURLToPath(new URL('../../api', import.meta.url))
 function functionFiles(dir) {
   const out = []
@@ -156,10 +156,11 @@ function functionFiles(dir) {
   return out.sort()
 }
 
-test('the deployment stays within the 12-function Hobby limit, with A4 as a single catch-all function', () => {
+test('the deployment stays within the 12-function Hobby limit, with A4 as a single function', () => {
   const files = functionFiles(API_DIR)
   assert.ok(files.length <= 12, `${files.length} functions: ${files.join(', ')}`)
-  assert.ok(files.includes('[...path].js'), 'A4 is served by api/[...path].js')
+  assert.ok(files.includes('workspace.js'), 'A4 is served by api/workspace.js (reached through the vercel.json rewrites)')
+  assert.equal(files.includes('[...path].js'), false, 'a catch-all file does not match multi-segment paths on Vercel')
   const perRoute = files.filter((f) => /^(projects|conversations|saved|library)\//.test(f))
   assert.deepEqual(perRoute, [], 'no per-route A4 function files')
 })
