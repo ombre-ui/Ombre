@@ -8,6 +8,7 @@
 //     ownership check. Queries also filter on user_id explicitly (defence in depth);
 //   - a foreign or nonexistent id is always 404 (never 403);
 //   - responses are built by explicit mappers (workspaceData.js), never raw rows.
+// Every route declares its query parameters (query: {} when it takes none), so any other parameter is a 400.
 // There is no service-role key anywhere in this file or its dependencies.
 import { createRoute } from './pipeline.js'
 import { requireUser } from './user.js'
@@ -94,7 +95,7 @@ export function createWorkspaceRoutes({ getConfig, createSupabase, logger }) {
 
   // GET | PATCH | DELETE /api/projects/:id
   const projectById = route(
-    { methods: ['GET', 'PATCH', 'DELETE'], path: '/api/projects/:id', body: { PATCH: PROJECT_PATCH_KEYS } },
+    { methods: ['GET', 'PATCH', 'DELETE'], path: '/api/projects/:id', query: {}, body: { PATCH: PROJECT_PATCH_KEYS } },
     async (ctx) => {
       const { supabase, user } = await requireUser(ctx)
       const { id } = ctx.params
@@ -185,7 +186,7 @@ export function createWorkspaceRoutes({ getConfig, createSupabase, logger }) {
 
   // GET | PATCH | DELETE /api/conversations/:id
   const conversationById = route(
-    { methods: ['GET', 'PATCH', 'DELETE'], path: '/api/conversations/:id', body: { PATCH: CONVERSATION_PATCH_KEYS } },
+    { methods: ['GET', 'PATCH', 'DELETE'], path: '/api/conversations/:id', query: {}, body: { PATCH: CONVERSATION_PATCH_KEYS } },
     async (ctx) => {
       const { supabase, user } = await requireUser(ctx)
       const { id } = ctx.params
@@ -308,7 +309,7 @@ export function createWorkspaceRoutes({ getConfig, createSupabase, logger }) {
   )
 
   // DELETE /api/saved/:id
-  const savedById = route({ methods: ['DELETE'], path: '/api/saved/:id' }, async (ctx) => {
+  const savedById = route({ methods: ['DELETE'], path: '/api/saved/:id', query: {} }, async (ctx) => {
     const { supabase, user } = await requireUser(ctx)
     const result = await supabase.from(SAVED_TABLE).delete().eq('id', ctx.params.id).eq(OWNER_COLUMN, user.id).select('id')
     singleRow(ctx, 'workspace.saved.delete', result)
@@ -333,7 +334,7 @@ export function createWorkspaceRoutes({ getConfig, createSupabase, logger }) {
   )
 
   // GET /api/library/:id
-  const libraryById = route({ methods: ['GET'], path: '/api/library/:id' }, async (ctx) => {
+  const libraryById = route({ methods: ['GET'], path: '/api/library/:id', query: {} }, async (ctx) => {
     const { supabase, user } = await requireUser(ctx)
     const result = await supabase.from(LIBRARY_TABLE).select(LIBRARY_COLUMNS).eq('id', ctx.params.id).eq(OWNER_COLUMN, user.id)
     return { body: { item: rowToLibraryItem(singleRow(ctx, 'workspace.library.read', result)) } }
