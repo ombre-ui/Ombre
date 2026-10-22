@@ -1,16 +1,17 @@
 // Path-shape dispatch for the single Vercel function that serves the A4 workspace URLs.
 //
 // Vercel's Hobby plan allows 12 serverless functions per deployment and A2/A3 already use 11, so the nine A4
-// routes cannot each be their own file. They are served by one catch-all function (api/[...path].js) that
-// picks the route by URL shape and hands the untouched Request to it. Nothing about the routes changes:
-// each is still built by createRoute (Origin/CSRF, JSON-only, body allowlists, strict UUID/query/cursor
-// parsing, requireUser, RLS-scoped queries, generic errors), and each re-validates its own path template and
-// methods. This module only chooses; it does no authentication, parsing or data access.
+// routes cannot each be their own file. They are served by one function (api/workspace.js, reached through the
+// rewrites in vercel.json) that picks the route by URL shape and hands the untouched Request to it. Nothing
+// about the routes changes: each is still built by createRoute (Origin/CSRF, JSON-only, body allowlists, strict
+// UUID/query/cursor parsing, requireUser, RLS-scoped queries, generic errors), and each re-validates its own
+// path template and methods. This module only chooses; it does no authentication, parsing or data access.
 //
-// Scope: only the four A4 resource families are dispatched. Every other path that reaches the catch-all
-// (specific files such as api/auth/*.js always win over it) gets the pipeline's generic 404.
+// Scope: only the four A4 resource families are dispatched. Every other path that reaches this function
+// gets the pipeline's generic 404.
 import { createRoute } from './pipeline.js'
 import { notFound } from './errors.js'
+import { PLATFORM_REWRITE_PARAMS } from './params.js'
 import { MESSAGE_BODY_MAX_BYTES } from './workspaceData.js'
 
 // URL parts after splitting '/api/<family>/<id>/<sub>' on '/': ['', 'api', family, id, sub].
@@ -24,7 +25,7 @@ const FAMILIES = {
 // deps: the same { getConfig, createSupabase, logger } the routes were built with.
 // resources: the nine routes returned by createWorkspaceRoutes(deps).
 export function createWorkspaceDispatcher(deps, resources) {
-  // Any path the catch-all function receives that is not one of the nine routes: the pipeline's generic 404.
+  // Any path this function receives that is not one of the nine routes: the pipeline's generic 404.
   const unknown = createRoute(deps, { methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] }, async () => {
     throw notFound()
   })
@@ -43,7 +44,10 @@ export function createWorkspaceDispatcher(deps, resources) {
   }
 
   async function workspace(request) {
-    return select(new URL(request.url).pathname)(request)
+    const url = new URL(request.url)
+    // Diagnostic: which platform rewrite parameters (names only, never values) reached the function.
+    deps.logger.info('workspace.dispatch', { rewriteParams: PLATFORM_REWRITE_PARAMS.filter((name) => url.searchParams.has(name)) })
+    return select(url.pathname)(request)
   }
 
   // The Node adapter buffers up to this many bytes before the route runs. It is the largest per-route limit
