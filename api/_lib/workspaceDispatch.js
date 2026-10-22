@@ -11,7 +11,6 @@
 // gets the pipeline's generic 404.
 import { createRoute } from './pipeline.js'
 import { notFound } from './errors.js'
-import { PLATFORM_REWRITE_PARAMS } from './params.js'
 import { MESSAGE_BODY_MAX_BYTES } from './workspaceData.js'
 
 // URL parts after splitting '/api/<family>/<id>/<sub>' on '/': ['', 'api', family, id, sub].
@@ -32,6 +31,7 @@ export function createWorkspaceDispatcher(deps, resources) {
   const routes = { ...resources, unknown }
 
   // Returns the route that should handle this pathname (the generic 404 route when none does).
+  // The query string is deliberately not an input: nothing a client puts in it can select a route.
   function select(pathname) {
     const trimmed = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
     const parts = trimmed.split('/')
@@ -44,16 +44,7 @@ export function createWorkspaceDispatcher(deps, resources) {
   }
 
   async function workspace(request) {
-    const url = new URL(request.url)
-    // Diagnostic: which platform rewrite parameters (names only, never values) reached the function.
-    // Logged as scalars because the logger redacts arrays and objects.
-    const present = PLATFORM_REWRITE_PARAMS.filter((name) => url.searchParams.has(name))
-    deps.logger.info('workspace.dispatch', {
-      rewriteParamCount: present.length,
-      rewriteParamNames: present.join(',') || 'none',
-      queryParamCount: [...url.searchParams.keys()].length,
-    })
-    return select(url.pathname)(request)
+    return select(new URL(request.url).pathname)(request)
   }
 
   // The Node adapter buffers up to this many bytes before the route runs. It is the largest per-route limit
