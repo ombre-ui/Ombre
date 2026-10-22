@@ -46,7 +46,13 @@ export function createWorkspaceDispatcher(deps, resources) {
   async function workspace(request) {
     const url = new URL(request.url)
     // Diagnostic: which platform rewrite parameters (names only, never values) reached the function.
-    deps.logger.info('workspace.dispatch', { rewriteParams: PLATFORM_REWRITE_PARAMS.filter((name) => url.searchParams.has(name)) })
+    // Logged as scalars because the logger redacts arrays and objects.
+    const present = PLATFORM_REWRITE_PARAMS.filter((name) => url.searchParams.has(name))
+    deps.logger.info('workspace.dispatch', {
+      rewriteParamCount: present.length,
+      rewriteParamNames: present.join(',') || 'none',
+      queryParamCount: [...url.searchParams.keys()].length,
+    })
     return select(url.pathname)(request)
   }
 
