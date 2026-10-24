@@ -1,3 +1,13 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:__vf(projects|conversations|saved|library)",
+      "destination": "/api/workspace"
+    },
+    {
+      "source": "/api/:__vf(projects|conversations|saved|library)/:__vp*",
+      "destination": "/api/workspace"
+    }
+  ]
 }
