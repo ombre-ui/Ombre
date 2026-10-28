@@ -21,7 +21,11 @@ test('bundle scan flags secrets, supabase libraries/urls, keys and env values', 
     'c="__Host-ombre-auth"',
   ]
   for (const text of bad) assert.ok(scanBundleText('f.js', text).length > 0, text)
-  assert.ok(scanBundleText('f.js', 'const k="0123456789abcdefXYZ"', { SUPABASE_PUBLISHABLE_KEY: '0123456789abcdefXYZ' }).length > 0)
+  // The scanner flags a bundle that contains the value of the configured publishable key (it requires at least 16
+  // characters). The value here is an obviously fake, low-entropy placeholder built at runtime, so no key-like
+  // literal sits next to the variable name in this file and the repository secret scanner has nothing to match.
+  const fakeValue = 'fake'.repeat(6)
+  assert.ok(scanBundleText('f.js', `const k="${fakeValue}"`, { SUPABASE_PUBLISHABLE_KEY: fakeValue }).length > 0)
 })
 
 test('bundle scan passes ordinary application code', () => {

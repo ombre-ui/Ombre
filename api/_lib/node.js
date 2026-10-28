@@ -1,7 +1,8 @@
 // Thin adapter: Vercel's Node (req, res) handler <-> Web-standard (Request) => Response route.
 // Only needed because the routes are written against Web Request/Response so they can be unit tested
 // without a server. The body is read from the stream here (bounded) so an oversized body is rejected
-// before anything is buffered, and no framework body parser sees it.
+// before anything is buffered, and no framework body parser sees it. The limit is the route's own
+// (route.maxBodyBytes, set by createRoute) and defaults to MAX_BODY_BYTES.
 import { MAX_BODY_BYTES } from './pipeline.js'
 
 const DROP_REQUEST_HEADERS = new Set(['host', 'connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'content-length', 'expect'])
@@ -35,6 +36,7 @@ function sendJson(res, status, body) {
 }
 
 export function toNode(route) {
+  const limit = typeof route.maxBodyBytes === 'number' ? route.maxBodyBytes : MAX_BODY_BYTES
   return async function handler(req, res) {
     try {
       const headers = new Headers()
@@ -43,7 +45,7 @@ export function toNode(route) {
         headers.append(key, Array.isArray(value) ? value.join(', ') : value)
       }
       const hasBody = req.method !== 'GET' && req.method !== 'HEAD'
-      const body = hasBody ? await readLimited(req, MAX_BODY_BYTES) : undefined
+      const body = hasBody ? await readLimited(req, limit) : undefined
       // The request host is never trusted or used; only the path matters to the routes.
       const request = new Request(`http://internal.invalid${req.url}`, {
         method: req.method,
