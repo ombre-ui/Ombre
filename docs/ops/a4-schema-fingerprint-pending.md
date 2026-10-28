@@ -1,4 +1,4 @@
-# A4 schema fingerprint and generated types: pending items
+# A4 schema fingerprint, generated types and integration tests: pending items
 
 Status: **Option A.** The recorded fingerprint (`docs/ops/schema-fingerprint.expected`) is the live A3 schema and stays
 authoritative. The A4 migrations are intentionally **not applied to production**, so the CI step "Schema fingerprint
@@ -34,20 +34,61 @@ branch.
 
 `docs/ops/schema-fingerprint-coverage.sql` (not read by CI) fingerprints indexes and Realtime publication membership.
 Live A3 values: `index|2|ee150a218b04609e5bfd9c34e87f8419`, no `publication` rows (an empty publication is an absent
-section). Predicted A4 replay: 18 index rows (2 + 5 primary keys + 5 unique-constraint indexes + 6 explicit indexes,
-including the idempotency index `messages_user_request_key` and the partial keyset index
-`conversations_project_last_message_idx`), and still no `publication` rows (A4 uses no Realtime).
+section). Predicted A4 replay: **20** index rows (2 + 5 primary keys + 5 unique-constraint indexes + 8 explicit
+indexes), and still no `publication` rows (A4 uses no Realtime). The 8 explicit indexes are `projects_user_updated_idx`,
+`conversations_user_last_message_idx`, `conversations_project_last_message_idx` (partial keyset),
+`messages_user_request_key` (unique, **non-partial** so its leading `user_id` also serves the `auth.users` cascade),
+`saved_items_user_created_idx`, `saved_items_message_idx` and `library_items_project_idx` (both foreign-key support,
+partial on `... is not null`), and `library_items_user_source_created_idx`. `tests/scripts/a4-fk-indexes.test.js`
+statically checks that every foreign key on an A4 table has a covering index.
 
 ## Runbook for the deferred live migration (after PR review and your explicit approval)
 
-1. Apply the five A4 migrations to the live project one at a time, verifying schema, advisors and fingerprint after each.
-2. Run `schema-fingerprint.sql` and `schema-fingerprint-coverage.sql` read-only against the live project.
-3. Confirm a local replay produces the same output.
-4. In one change: merge the `index` and `publication` sections of the coverage file into `schema-fingerprint.sql`,
+1. Run the A4 integration suites (below) against a local stack and get them green.
+2. Apply the five A4 migrations to the live project one at a time, verifying schema, advisors and fingerprint after each.
+3. Run `schema-fingerprint.sql` and `schema-fingerprint-coverage.sql` read-only against the live project.
+4. Confirm a local replay produces the same output.
+5. In one change: merge the `index` and `publication` sections of the coverage file into `schema-fingerprint.sql`,
    regenerate `schema-fingerprint.expected` from the live output, and update the pinned snapshot in
    `tests/scripts/fingerprint-sql.test.js` (its guard test exists to make this a deliberate step).
-5. Regenerate `supabase/types/database.types.ts` (see below) so the type-drift step passes.
-6. Deploy the API code, then the frontend, then run the two-account smoke test.
+6. Regenerate `supabase/types/database.types.ts` (see below) so the type-drift step passes.
+7. Deploy the API code, then the frontend, then run the two-account smoke test.
+
+## A4 integration tests (real database)
+
+Two suites run against the real local stack and are skipped unless `AUTH_INTEGRATION=1` (`npm run test:integration` runs
+them together with the A2/A3 suites):
+
+- `tests/integration/workspace-db.test.js` drives the real Postgres container (`docker exec ... psql`) as `anon`,
+  `authenticated` (with `request.jwt.claims`, as PostgREST does) and the owner: isolation, spoofed `user_id`, cross-tenant
+  composite FKs, column grants, forged assistant/demo rows, append-only, anonymous and private-function denial, per-user
+  and 500-message caps, concurrent sequence numbers, `save_history`, `create_conversation` atomicity, idempotency,
+  project/conversation/account deletes, library read-only, and grant/function-privilege catalog checks.
+- `tests/integration/workspace-api.test.js` runs the real workspace routes against real PostgREST with two real signed-in
+  users: embedded conversation count, referenced-table filter/order/limit on messages, keyset pagination with equal
+  timestamps, end-to-end idempotency, cross-tenant 404s, the `save_history` gate through the real settings route, saved
+  items, library read-only, and cascades.
+
+They have to run where Docker and the Supabase CLI exist: `supabase start && supabase db reset && npm run test:integration`.
+CI already starts exactly that stack in the `supabase` job, but running them there needs one workflow step, and the
+integration used for this branch cannot edit `.github/workflows/` (403). Exact step, for someone with workflow access, to
+add to job `supabase` after "Reset database from migrations only" (and it may use the same `if:` as the types step so it
+also runs while the fingerprint step is red):
+
+```yaml
+      - name: A4 integration tests (real Postgres and PostgREST)
+        if: ${{ !cancelled() && steps.reset.outcome == 'success' }}
+        env:
+          AUTH_INTEGRATION: '1'
+        run: |
+          eval "$(supabase status -o env | sed 's/^/export /')"
+          export SUPABASE_URL="${API_URL}" SUPABASE_PUBLISHABLE_KEY="${ANON_KEY}"
+          node --test tests/integration/workspace-db.test.js tests/integration/workspace-api.test.js
+```
+
+The `supabase status -o env` variable names depend on the CLI version (`ANON_KEY` / `PUBLISHABLE_KEY`); the existing
+auth integration job or `docs/auth.md` shows which pair the A2/A3 suites use. As of this writing neither suite has been
+executed anywhere.
 
 ## Generated-types check (pending)
 
