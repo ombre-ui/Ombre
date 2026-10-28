@@ -23,6 +23,12 @@ create table public.saved_items (
 create index saved_items_user_created_idx
   on public.saved_items (user_id, created_at desc, id desc);
 
+-- Supports the composite foreign key to messages (ON DELETE CASCADE when a message is deleted with its conversation).
+-- Partial: whole-conversation bookmarks have no message_id and never match that foreign key.
+create index saved_items_message_idx
+  on public.saved_items (message_id, conversation_id)
+  where message_id is not null;
+
 alter table public.saved_items enable row level security;
 
 revoke all on table public.saved_items from anon;

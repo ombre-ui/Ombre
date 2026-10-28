@@ -29,6 +29,12 @@ create table public.library_items (
 create index library_items_user_source_created_idx
   on public.library_items (user_id, source, created_at desc, id desc);
 
+-- Supports the composite foreign key to projects (ON DELETE SET NULL (project_id) when a project is deleted).
+-- Partial: items without a project never match that foreign key.
+create index library_items_project_idx
+  on public.library_items (project_id)
+  where project_id is not null;
+
 alter table public.library_items enable row level security;
 
 revoke all on table public.library_items from anon;

@@ -39,9 +39,11 @@ create table public.messages (
   constraint messages_id_conversation_id_key unique (id, conversation_id)
 );
 
+-- Idempotency key per user. Deliberately NOT partial: NULLs are distinct in a unique index, so messages sent without
+-- a key never conflict, and the leading user_id column also serves the auth.users -> messages.user_id
+-- ON DELETE CASCADE lookup (a partial index could not be used for that lookup).
 create unique index messages_user_request_key
-  on public.messages (user_id, client_request_id)
-  where client_request_id is not null;
+  on public.messages (user_id, client_request_id);
 
 alter table public.messages enable row level security;
 
