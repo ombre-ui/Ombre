@@ -74,7 +74,15 @@ async function mkProject(uid, name = 'project') {
   return (await run(asUser(uid, `with r as (insert into public.projects (name) values (${q(name)}) returning id) select '@@'||id from r;`)))[0]
 }
 async function mkConversation(uid, { project = null, content = 'hello', title = 'a title', mentor = null, key = randomUUID() } = {}) {
-  const out = await run(asUser(uid, `select '@@'||(public.create_conversation(${q(title)}, ${nul(mentor)}, ${nul(project)}, ${q(content)}, ${q(key)}))->'conversation'->>'id';`))
+  // The function result is selected in a CTE and the JSON path is applied inside explicit parentheses. Writing
+  // '@@'||(f(...))->'conversation' parses as ('@@'||f(...))->'conversation' (|| and -> share precedence and are
+  // left-associative), which tries to cast the text '@@{...}' to json.
+  const out = await run(
+    asUser(
+      uid,
+      `with r as (select public.create_conversation(${q(title)}, ${nul(mentor)}, ${nul(project)}, ${q(content)}, ${q(key)}) as result) select '@@'||(result->'conversation'->>'id') from r;`,
+    ),
+  )
   return out[0]
 }
 async function mkMessage(uid, conv, { role = 'user', demo = false, content = 'm', key = null } = {}) {
