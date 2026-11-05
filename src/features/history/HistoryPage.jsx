@@ -1,17 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
-import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import { getMentorWithPath } from '../mentors/categories.js'
 import './history.css'
 
 const BUCKET_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older']
-
-const STATUS_LABEL = {
-  pending: 'A demo reply is still pending',
-  error: 'The last response failed',
-}
 
 function bucketFor(dateStr) {
   const d = new Date(dateStr)
@@ -39,10 +33,23 @@ export default function HistoryPage() {
   const { listConversations, getProject } = useOmbreData()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const [conversations, setConversations] = useState([])
+  const [loadError, setLoadError] = useState('')
 
-  // Conversation lists are lightweight backend records, so message bodies are not
-  // loaded here. messageCount is the authoritative indicator for history.
-  const conversations = listConversations().filter((c) => (c.messageCount ?? c.messages?.length ?? 0) > 0)
+  useEffect(() => {
+    let active = true
+    listConversations().then((result) => {
+      if (!active) return
+      if (!result.ok) {
+        setLoadError(result.error?.message ?? 'Couldn’t load history.')
+        setConversations([])
+        return
+      }
+      setLoadError('')
+      setConversations((result.data.conversations ?? []).filter((c) => (c.messageCount ?? c.messages?.length ?? 0) > 0))
+    })
+    return () => { active = false }
+  }, [listConversations])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -70,7 +77,7 @@ export default function HistoryPage() {
         <p className="text-body text-secondary">Where your thinking has been.</p>
       </header>
 
-      <PreviewNotice kind="history" />
+      {loadError && <p className="text-body-sm text-secondary">{loadError}</p>}
 
       <div className="history-search">
         <Search size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -103,7 +110,6 @@ export default function HistoryPage() {
                 .map((c) => {
                   const mentorContext = c.mentorId ? getMentorWithPath(c.mentorId) : null
                   const project = c.projectId ? getProject(c.projectId) : null
-                  const statusLabel = null
                   return (
                     <li key={c.id}>
                       <button
@@ -114,14 +120,6 @@ export default function HistoryPage() {
                         <span className="history-item-main">
                           <span className="history-item-title-row">
                             <span className="text-body history-item-title">{c.title}</span>
-                            {statusLabel && (
-                              <span
-                                className={`history-status is-${lastStatus}`}
-                                role="img"
-                                aria-label={statusLabel}
-                                title={statusLabel}
-                              />
-                            )}
                           </span>
                           <span className="text-meta">{formatMeta(c)}</span>
                         </span>
