@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useOmbreData } from '../../lib/store.jsx'
-import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import LibraryItemCard from './LibraryItemCard.jsx'
 import './library.css'
 
@@ -43,8 +42,6 @@ export default function LibraryPage() {
         <h1 className="text-heading-lg">Library</h1>
         <p className="text-body text-secondary">Everything you've sent, and everything Ombre has generated for you.</p>
       </header>
-
-      <PreviewNotice />
 
       {loadError && <p className="text-body text-secondary">{loadError}</p>}
 
