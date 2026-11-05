@@ -1,23 +1,87 @@
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
-import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import './projects.css'
 
 export default function ProjectWorkspacePage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
-  const { getProject, listConversationsForProject, createConversation, sendMessage } = useOmbreData()
+  const {
+    getProject,
+    loadProjects,
+    listConversationsForProject,
+  } = useOmbreData()
+  const [projectLoading, setProjectLoading] = useState(true)
+  const [projectLoadFailed, setProjectLoadFailed] = useState(false)
+  const [conversations, setConversations] = useState([])
+  const [conversationsLoading, setConversationsLoading] = useState(true)
+  const [conversationLoadFailed, setConversationLoadFailed] = useState(false)
 
   const project = getProject(projectId)
-  // Projects are session-only for now, so after a reload (or a stale link) the project no longer exists.
-  if (!project) return <Navigate to="/app/projects" replace />
 
-  const conversations = listConversationsForProject(projectId)
+  useEffect(() => {
+    let active = true
+
+    async function ensureProject() {
+      if (project) {
+        setProjectLoading(false)
+        return
+      }
+
+      setProjectLoading(true)
+      const result = await loadProjects()
+      if (!active) return
+
+      if (!result.ok || !result.data.projects.some((item) => item.id === projectId)) {
+        setProjectLoadFailed(true)
+      } else {
+        setProjectLoadFailed(false)
+      }
+      setProjectLoading(false)
+    }
+
+    ensureProject()
+    return () => {
+      active = false
+    }
+  }, [loadProjects, project, projectId])
+
+  useEffect(() => {
+    if (!project) return
+
+    let active = true
+    setConversationsLoading(true)
+    setConversationLoadFailed(false)
+
+    listConversationsForProject(projectId).then((result) => {
+      if (!active) return
+      if (!result.ok) {
+        setConversationLoadFailed(true)
+        setConversations([])
+      } else {
+        setConversations(result.data.conversations)
+      }
+      setConversationsLoading(false)
+    })
+
+    return () => {
+      active = false
+    }
+  }, [listConversationsForProject, project, projectId])
+
+  if (projectLoading) {
+    return (
+      <div className="project-workspace motion-return">
+        <p className="text-body text-secondary">Loading project…</p>
+      </div>
+    )
+  }
+
+  if (projectLoadFailed || !project) return <Navigate to="/app/projects" replace />
 
   function handleNewConversation() {
-    const id = createConversation({ projectId })
-    navigate(`/app/general/${id}`)
+    navigate(`/app/general?projectId=${encodeURIComponent(projectId)}`)
   }
 
   return (
@@ -29,11 +93,6 @@ export default function ProjectWorkspacePage() {
         )}
       </header>
 
-      <PreviewNotice>
-        Preview only. This project and the conversations in it exist only in this browser session. They aren’t saved
-        to your account and disappear when you reload.
-      </PreviewNotice>
-
       <section className="project-section">
         <div className="project-section-header">
           <h2 className="text-heading-sm">Conversations</h2>
@@ -42,7 +101,14 @@ export default function ProjectWorkspacePage() {
             New
           </button>
         </div>
-        {conversations.length === 0 ? (
+
+        {conversationsLoading ? (
+          <p className="text-body-sm text-secondary">Loading conversations…</p>
+        ) : conversationLoadFailed ? (
+          <p className="text-body-sm text-secondary">
+            Couldn’t load this project’s conversations. Try opening the project again.
+          </p>
+        ) : conversations.length === 0 ? (
           <p className="text-body-sm text-secondary">
             No conversations yet. Start one here, or add an existing General AI conversation to
             this project.
@@ -57,7 +123,7 @@ export default function ProjectWorkspacePage() {
                   onClick={() => navigate(`/app/general/${c.id}`)}
                 >
                   <span className="text-body">{c.title}</span>
-                  <span className="text-meta">{c.messages.length} messages</span>
+                  <span className="text-meta">{c.messageCount ?? c.messages?.length ?? 0} messages</span>
                 </button>
               </li>
             ))}
