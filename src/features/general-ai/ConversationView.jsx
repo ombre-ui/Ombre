@@ -1,10 +1,30 @@
+import { useEffect, useState } from 'react'
 import Composer from './Composer.jsx'
 import MessageList from './MessageList.jsx'
 import AddToProjectMenu from './AddToProjectMenu.jsx'
 import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import './general-ai.css'
+import { useOmbreData } from '../../lib/store.jsx'
 
 export default function ConversationView({ conversation, mentorContext, onSend, onRetry, onLinked }) {
+  const { listSavedItems, saveMessage, deleteSavedItem, isMessageSaved, getSavedItemForMessage } = useOmbreData()
+  const [savingMessageId, setSavingMessageId] = useState(null)
+
+  useEffect(() => {
+    listSavedItems()
+  }, [listSavedItems])
+
+  const handleToggleSave = async (messageId) => {
+    setSavingMessageId(messageId)
+    try {
+      const savedItem = getSavedItemForMessage(messageId)
+      if (savedItem) await deleteSavedItem(savedItem.id)
+      else await saveMessage(conversation.id, messageId)
+    } finally {
+      setSavingMessageId(null)
+    }
+  }
+
   const showMentorIntro = mentorContext && conversation.messages.length === 0
 
   return (
@@ -35,7 +55,13 @@ export default function ConversationView({ conversation, mentorContext, onSend, 
         </p>
       )}
 
-      <MessageList messages={conversation.messages} onRetry={onRetry} />
+      <MessageList
+        messages={conversation.messages}
+        onRetry={onRetry}
+        isMessageSaved={isMessageSaved}
+        onToggleSave={handleToggleSave}
+        savingMessageId={savingMessageId}
+      />
 
       <div className="conversation-composer">
         <Composer onSend={onSend} />
