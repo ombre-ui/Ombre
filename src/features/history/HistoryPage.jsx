@@ -31,21 +31,18 @@ function formatMeta(conversation) {
     hour: 'numeric',
     minute: '2-digit',
   })
-  const count = conversation.messages.length
+  const count = conversation.messageCount ?? conversation.messages?.length ?? 0
   return `${time} · ${count} ${count === 1 ? 'message' : 'messages'}`
 }
 
 export default function HistoryPage() {
-  // History reads the same Conversation records General AI and mentors write.
-  // listConversations() is the integration point to swap for real history
-  // from Supabase later; nothing on this page defines its own conversation model.
   const { listConversations, getProject } = useOmbreData()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
 
-  // A conversation with no messages yet (e.g. "Start conversation" on a mentor
-  // profile, then leaving) has nothing to return to, so it isn't listed.
-  const conversations = listConversations().filter((c) => c.messages.length > 0)
+  // Conversation lists are lightweight backend records, so message bodies are not
+  // loaded here. messageCount is the authoritative indicator for history.
+  const conversations = listConversations().filter((c) => (c.messageCount ?? c.messages?.length ?? 0) > 0)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -106,8 +103,7 @@ export default function HistoryPage() {
                 .map((c) => {
                   const mentorContext = c.mentorId ? getMentorWithPath(c.mentorId) : null
                   const project = c.projectId ? getProject(c.projectId) : null
-                  const lastStatus = c.messages[c.messages.length - 1]?.status
-                  const statusLabel = STATUS_LABEL[lastStatus]
+                  const statusLabel = null
                   return (
                     <li key={c.id}>
                       <button
