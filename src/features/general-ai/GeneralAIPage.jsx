@@ -10,6 +10,7 @@ export default function GeneralAIPage() {
   const { conversationId } = useParams()
   const [searchParams] = useSearchParams()
   const projectId = searchParams.get('projectId') || null
+  const mentorId = searchParams.get('mentorId') || null
   const navigate = useNavigate()
   const {
     getConversation,
@@ -36,7 +37,7 @@ export default function GeneralAIPage() {
 
   async function handleFirstSend(text) {
     setSending(true)
-    const result = await createConversation({ content: text, projectId })
+    const result = await createConversation({ content: text, projectId, mentorId })
     setSending(false)
 
     if (!result.ok) {
