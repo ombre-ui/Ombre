@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useOmbreData } from '../../lib/store.jsx'
 import { getMentorWithPath } from '../mentors/categories.js'
 import EmptyStart from './EmptyStart.jsx'
@@ -8,6 +8,8 @@ import './general-ai.css'
 
 export default function GeneralAIPage() {
   const { conversationId } = useParams()
+  const [searchParams] = useSearchParams()
+  const projectId = searchParams.get('projectId') || null
   const navigate = useNavigate()
   const {
     getConversation,
@@ -34,7 +36,7 @@ export default function GeneralAIPage() {
 
   async function handleFirstSend(text) {
     setSending(true)
-    const result = await createConversation({ content: text })
+    const result = await createConversation({ content: text, projectId })
     setSending(false)
 
     if (!result.ok) {
