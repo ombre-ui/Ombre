@@ -132,6 +132,34 @@
 }
 .message-retry:hover { background: var(--surface-elevated); }
 
+.message-content-with-save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+.message-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, color 160ms ease, background 160ms ease;
+}
+.message-row:hover .message-save,
+.message-save:focus-visible,
+.message-save.is-saved { opacity: 1; }
+.message-save:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-elevated); }
+.message-save.is-saved { color: var(--accent); }
+.message-save:disabled { cursor: wait; opacity: 0.5; }
+
 /* ---- Composer ---------------------------------------------------------- */
 .conversation-composer { padding-top: var(--space-3); }
 
