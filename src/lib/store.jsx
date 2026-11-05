@@ -7,6 +7,7 @@ function initialState() {
     conversations: {},
     projects: {},
     libraryItems: {},
+    savedItems: {},
     memoryItems: {},
     conversationStatus: {},
   }
@@ -71,6 +72,15 @@ function reducer(state, action) {
       return { ...state, projects: { ...state.projects, [action.project.id]: action.project } }
     case 'SET_LIBRARY':
       return { ...state, libraryItems: Object.fromEntries(action.items.map((i) => [i.id, i])) }
+    case 'SET_SAVED':
+      return { ...state, savedItems: Object.fromEntries(action.items.map((i) => [i.id, i])) }
+    case 'SET_SAVED_ITEM':
+      return { ...state, savedItems: { ...state.savedItems, [action.item.id]: action.item } }
+    case 'DELETE_SAVED_ITEM': {
+      const next = { ...state.savedItems }
+      delete next[action.id]
+      return { ...state, savedItems: next }
+    }
     case 'ADD_MEMORY_ITEM':
       return { ...state, memoryItems: { ...state.memoryItems, [action.item.id]: action.item } }
     case 'UPDATE_MEMORY_ITEM': {
@@ -252,6 +262,42 @@ export function OmbreDataProvider({ children }) {
     return { ok: true, data: { items } }
   }, [])
 
+  const listSavedItems = useCallback(async () => {
+    const result = await apiRequest('/api/saved?limit=100')
+    if (!result.ok) return result
+    const items = (result.data.items ?? []).map((item) => ({
+      id: item.id, conversationId: item.conversationId, messageId: item.messageId ?? null, createdAt: item.createdAt,
+    }))
+    dispatch({ type: 'SET_SAVED', items })
+    return { ok: true, data: { items } }
+  }, [])
+
+  const saveMessage = useCallback(async (conversationId, messageId) => {
+    const result = await apiRequest('/api/saved', { method: 'POST', body: { conversationId, messageId } })
+    if (!result.ok) return result
+    const item = result.data.item
+    const normalized = { id: item.id, conversationId: item.conversationId, messageId: item.messageId ?? null, createdAt: item.createdAt }
+    dispatch({ type: 'SET_SAVED_ITEM', item: normalized })
+    return { ok: true, data: { item: normalized } }
+  }, [])
+
+  const deleteSavedItem = useCallback(async (id) => {
+    if (!id) return { ok: false, status: 400, error: { code: 'invalid_id', message: 'Saved item id is required.' } }
+    const result = await apiRequest(`/api/saved/${id}`, { method: 'DELETE' })
+    if (!result.ok) return result
+    dispatch({ type: 'DELETE_SAVED_ITEM', id })
+    return { ok: true, data: { id } }
+  }, [])
+
+  const isMessageSaved = useCallback(
+    (messageId) => Object.values(state.savedItems).some((item) => item.messageId === messageId),
+    [state.savedItems],
+  )
+
+  const getSavedItemForMessage = useCallback(
+    (messageId) => Object.values(state.savedItems).find((item) => item.messageId === messageId) ?? null,
+    [state.savedItems],
+  )
   const listMemoryItems = useCallback(
     () => Object.values(state.memoryItems).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
     [state.memoryItems],
@@ -281,6 +327,11 @@ export function OmbreDataProvider({ children }) {
     listProjects,
     listConversationsForProject,
     listLibraryItems,
+    listSavedItems,
+    saveMessage,
+    deleteSavedItem,
+    isMessageSaved,
+    getSavedItemForMessage,
     listMemoryItems,
     createMemoryItem,
     updateMemoryItem,
@@ -288,7 +339,8 @@ export function OmbreDataProvider({ children }) {
   }), [
     loadConversation, getConversation, getConversationStatus, listConversations, createConversation,
     sendMessage, retryMessage, loadProjects, createProject, getProject, addConversationToProject,
-    listProjects, listConversationsForProject, listLibraryItems, listMemoryItems, createMemoryItem,
+    listProjects, listConversationsForProject, listLibraryItems, listSavedItems, saveMessage, deleteSavedItem,
+    isMessageSaved, getSavedItemForMessage, listMemoryItems, createMemoryItem,
     updateMemoryItem, deleteMemoryItem,
   ])
 
