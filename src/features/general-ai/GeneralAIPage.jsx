@@ -27,12 +27,16 @@ export default function GeneralAIPage() {
   const conversationStatus = conversationId ? getConversationStatus(conversationId) : 'idle'
 
   useEffect(() => {
-    if (!conversationId || conversation || conversationStatus === 'loading' || conversationStatus === 'missing') return
+    if (!conversationId || conversation || conversationStatus !== 'idle') return
     loadConversation(conversationId)
   }, [conversationId, conversation, conversationStatus, loadConversation])
 
   if (conversationId && conversationStatus === 'missing') {
     return <Navigate to="/app/general" replace />
+  }
+
+  async function handleReloadConversation() {
+    await loadConversation(conversationId)
   }
 
   async function handleFirstSend(text) {
@@ -74,9 +78,14 @@ export default function GeneralAIPage() {
 
   return (
     <div className="general-ai-page">
-      {conversationId && !conversation && conversationStatus === 'loading' ? (
+      {conversationId && !conversation && (conversationStatus === 'idle' || conversationStatus === 'loading') ? (
         <div className="empty-start motion-reveal">
           <p className="text-body text-secondary empty-start-support">Loading conversation…</p>
+        </div>
+      ) : conversationId && !conversation && conversationStatus === 'error' ? (
+        <div className="empty-start motion-reveal">
+          <p className="text-body text-secondary empty-start-support">Couldn’t load this conversation.</p>
+          <button type="button" className="button button-secondary" onClick={handleReloadConversation}>Try again</button>
         </div>
       ) : !conversation ? (
         <EmptyStart onSend={handleFirstSend} disabled={sending} />
