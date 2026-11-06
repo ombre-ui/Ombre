@@ -104,6 +104,8 @@ function reducer(state, action) {
   }
 }
 
+const LIST_LIMIT = 50
+
 const OmbreDataContext = createContext(null)
 
 export function OmbreDataProvider({ children }) {
@@ -141,10 +143,9 @@ export function OmbreDataProvider({ children }) {
   )
 
   const listConversations = useCallback(async () => {
-    const result = await apiRequest('/api/conversations?limit=100')
+    const result = await apiRequest(`/api/conversations?limit=${LIST_LIMIT}`)
     if (!result.ok) return result
     const conversations = (result.data.conversations ?? []).map((c) => normalizeConversation(c))
-    conversations.forEach((conversation) => dispatch({ type: 'SET_CONVERSATION', conversation }))
     return { ok: true, data: { conversations } }
   }, [])
 
@@ -206,7 +207,7 @@ export function OmbreDataProvider({ children }) {
   }), [])
 
   const loadProjects = useCallback(async () => {
-    const result = await apiRequest('/api/projects?limit=100')
+    const result = await apiRequest(`/api/projects?limit=${LIST_LIMIT}`)
     if (!result.ok) return result
     const projects = (result.data.projects ?? []).map(normalizeProject)
     dispatch({ type: 'SET_PROJECTS', projects })
@@ -246,10 +247,9 @@ export function OmbreDataProvider({ children }) {
   )
 
   const listConversationsForProject = useCallback(async (projectId) => {
-    const result = await apiRequest(`/api/conversations?projectId=${encodeURIComponent(projectId)}&limit=100`)
+    const result = await apiRequest(`/api/conversations?projectId=${encodeURIComponent(projectId)}&limit=${LIST_LIMIT}`)
     if (!result.ok) return result
     const conversations = (result.data.conversations ?? []).map((c) => normalizeConversation(c))
-    conversations.forEach((conversation) => dispatch({ type: 'SET_CONVERSATION', conversation }))
     return { ok: true, data: { conversations } }
   }, [])
 
@@ -263,7 +263,7 @@ export function OmbreDataProvider({ children }) {
   }, [])
 
   const listSavedItems = useCallback(async () => {
-    const result = await apiRequest('/api/saved?limit=100')
+    const result = await apiRequest(`/api/saved?limit=${LIST_LIMIT}`)
     if (!result.ok) return result
     const items = (result.data.items ?? []).map((item) => ({
       id: item.id, conversationId: item.conversationId, messageId: item.messageId ?? null, createdAt: item.createdAt,
