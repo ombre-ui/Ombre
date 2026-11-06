@@ -39,16 +39,29 @@ test('run(): a complete tree passes; a missing notice or a broken import fails',
   ok['layout/PreviewNotice.jsx'] = 'export default () => null'
   assert.deepEqual(run(tree(ok)), [])
 
-  const noNotice = { ...ok, 'features/library/LibraryPage.jsx': "import PreviewNotice from '../../layout/PreviewNotice.jsx'\nexport default () => null" }
+  const required = NOTICE_REQUIRED[0]
+  const noNotice = { ...ok, [required]: "import PreviewNotice from '../../layout/PreviewNotice.jsx'\nexport default () => null" }
   const missing = run(tree(noNotice))
   assert.equal(missing.length, 1)
-  assert.match(missing[0], /LibraryPage\.jsx.*no <PreviewNotice>/)
+  assert.ok(missing[0].includes(required.split('/').pop()))
+  assert.match(missing[0], /no <PreviewNotice>/)
 
   const broken = run(tree({ ...ok, 'features/memory/MemoryPage.jsx': "import PreviewNotice from '../../layout/Gone.jsx'\nexport default () => <PreviewNotice />" }))
   assert.equal(broken.length, 1)
   assert.match(broken[0], /does not resolve/)
 
   const absent = { ...ok }
-  delete absent['features/history/HistoryPage.jsx']
+  delete absent[NOTICE_REQUIRED[0]]
   assert.ok(run(tree(absent)).some((p) => /expected page is missing/.test(p)))
+})
+
+test('A4-persisted surfaces are backed by the server and must not be required to show a preview notice', () => {
+  for (const rel of [
+    'features/projects/ProjectWorkspacePage.jsx',
+    'features/history/HistoryPage.jsx',
+    'features/library/LibraryPage.jsx',
+    'features/general-ai/ConversationView.jsx',
+  ]) {
+    assert.ok(!NOTICE_REQUIRED.includes(rel), `${rel} shows persisted data and must not be in NOTICE_REQUIRED`)
+  }
 })
