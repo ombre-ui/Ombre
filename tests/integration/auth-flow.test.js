@@ -148,6 +148,7 @@ suite('auth flow: signup -> PKCE confirm -> session -> signout -> signin -> reco
   const rec = await codeFromLink(await latestMailLink(email, /reset|recover/i))
   assert.equal(rec.path, '/auth/callback/recovery')
   const exchanged = await r.call('callback', { path: '/api/auth/callback', body: { code: rec.code, purpose: 'recovery' } })
+  console.log('RECOVERY_CALLBACK_DIAGNOSTIC', JSON.stringify(exchanged))
   assert.equal(exchanged.status, 200)
   assert.equal(exchanged.body.next, '/reset-password')
   assert.equal((await r.call('resetPassword', { path: '/api/auth/reset-password', body: { password: NEW_PASSWORD } })).status, 200)
