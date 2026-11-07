@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useOmbreData } from '../../lib/store.jsx'
-import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import LibraryItemCard from './LibraryItemCard.jsx'
 import './library.css'
 
@@ -19,7 +18,23 @@ const EMPTY_COPY = {
 export default function LibraryPage() {
   const { listLibraryItems } = useOmbreData()
   const [filter, setFilter] = useState('all')
-  const items = listLibraryItems(filter)
+  const [items, setItems] = useState([])
+  const [loadError, setLoadError] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    listLibraryItems(filter).then((result) => {
+      if (!active) return
+      if (!result.ok) {
+        setLoadError(result.error?.message ?? 'Couldn’t load the Library.')
+        setItems([])
+        return
+      }
+      setLoadError(null)
+      setItems(result.data.items ?? [])
+    })
+    return () => { active = false }
+  }, [filter, listLibraryItems])
 
   return (
     <div className="library-page motion-reveal">
@@ -28,12 +43,7 @@ export default function LibraryPage() {
         <p className="text-body text-secondary">Everything you've sent, and everything Ombre has generated for you.</p>
       </header>
 
-      {/* There is no way to add anything to the Library yet (no upload, no generated outputs), so this is accurate
-          for as long as the store has no add path. Remove it in the Library phase. */}
-      <PreviewNotice>
-        Not connected yet. Nothing can be added to the Library at the moment, so it stays empty until files and
-        generated outputs are supported.
-      </PreviewNotice>
+      {loadError && <p className="text-body text-secondary">{loadError}</p>}
 
       <div className="library-filters" role="tablist" aria-label="Filter library">
         {FILTERS.map((f) => (

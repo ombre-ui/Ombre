@@ -17,6 +17,7 @@ import MentorCategoryPage from './features/mentors/MentorCategoryPage.jsx'
 import MentorSubcategoryPage from './features/mentors/MentorSubcategoryPage.jsx'
 import MentorProfilePage from './features/mentors/MentorProfilePage.jsx'
 import LibraryPage from './features/library/LibraryPage.jsx'
+import SavedPage from './features/saved/SavedPage.jsx'
 import HistoryPage from './features/history/HistoryPage.jsx'
 import MemoryPage from './features/memory/MemoryPage.jsx'
 import ProfilePage from './features/profile/ProfilePage.jsx'
@@ -81,6 +82,7 @@ export default function App() {
               />
 
               <Route path="/app/library" element={<LibraryPage />} />
+              <Route path="/app/saved" element={<SavedPage />} />
               <Route path="/app/history" element={<HistoryPage />} />
               <Route path="/app/memory" element={<MemoryPage />} />
 

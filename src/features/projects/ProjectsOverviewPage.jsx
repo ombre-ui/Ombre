@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
 import PreviewNotice from '../../layout/PreviewNotice.jsx'
@@ -7,12 +7,27 @@ import CreateProjectDialog from './CreateProjectDialog.jsx'
 import './projects.css'
 
 export default function ProjectsOverviewPage() {
-  const { listProjects, createProject } = useOmbreData()
+  const { listProjects, loadProjects, createProject } = useOmbreData()
   const [showCreate, setShowCreate] = useState(false)
+  const [loadError, setLoadError] = useState(null)
   const projects = listProjects()
 
-  function handleCreate(name, description) {
-    createProject(name, description)
+  useEffect(() => {
+    let active = true
+    loadProjects().then((result) => {
+      if (!active || result.ok) return
+      setLoadError(result.error?.message ?? 'Couldn’t load projects.')
+    })
+    return () => { active = false }
+  }, [loadProjects])
+
+  async function handleCreate(name, description) {
+    const result = await createProject(name, description)
+    if (!result.ok) {
+      setLoadError(result.error?.message ?? 'Couldn’t create the project.')
+      return
+    }
+    setLoadError(null)
     setShowCreate(false)
   }
 
@@ -32,6 +47,8 @@ export default function ProjectsOverviewPage() {
 
       <PreviewNotice />
 
+      {loadError && <p className="text-body text-secondary">{loadError}</p>}
+
       {projects.length === 0 ? (
         <div className="projects-empty">
           <p className="text-body text-secondary">
@@ -45,7 +62,7 @@ export default function ProjectsOverviewPage() {
             <ProjectCard
               key={project.id}
               project={project}
-              conversationCount={project.conversationIds.length}
+              conversationCount={project.conversationCount ?? project.conversationIds.length}
             />
           ))}
         </div>

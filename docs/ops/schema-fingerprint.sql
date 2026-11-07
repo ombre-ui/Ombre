@@ -10,6 +10,14 @@
 -- The expected file is the A1 baseline. When a later migration changes the schema, compute the new
 -- fingerprint from the live project (read-only), confirm the local replay matches it, then update
 -- docs/ops/schema-fingerprint.expected in the same PR as the migration.
+--
+-- The trigger section covers every trigger on a table in the public schema (plus the auth.users signup trigger),
+-- so triggers on new tables are fingerprinted too. For the tables that exist today this returns exactly the same
+-- rows as the earlier profiles/user_settings-only filter, so the recorded baseline is unchanged.
+--
+-- Indexes and Realtime publication membership are NOT part of this fingerprint yet: adding those sections changes
+-- the output for the live baseline. They are produced by docs/ops/schema-fingerprint-coverage.sql, which CI does
+-- not read, and are merged into this file when the baseline is next regenerated (see docs/ops/a4-schema-fingerprint-pending.md).
 
 with r as (
   select 'table'::text sec, c.relname::text||' rls='||c.relrowsecurity::text||' force='||c.relforcerowsecurity::text||' owner='||pg_get_userbyid(c.relowner)::text line
@@ -36,7 +44,8 @@ with r as (
   union all
   select 'trigger', t.tgrelid::regclass::text||' '||t.tgname::text||' '||pg_get_triggerdef(t.oid)
     from pg_trigger t
-    where not t.tgisinternal and (t.tgrelid in ('public.profiles'::regclass,'public.user_settings'::regclass) or t.tgname='on_auth_user_created')
+    where not t.tgisinternal
+      and (t.tgrelid in (select c.oid from pg_class c where c.relnamespace='public'::regnamespace) or t.tgname='on_auth_user_created')
   union all
   select 'function', n.nspname::text||'.'||p.proname::text||' secdef='||p.prosecdef::text||' config='||coalesce(p.proconfig::text,'')||' body_md5='||md5(pg_get_functiondef(p.oid))
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')

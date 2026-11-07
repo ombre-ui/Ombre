@@ -12,12 +12,8 @@ const RETIRED_STORE_API = ['getProfile', 'updateProfile', 'getSettings', 'update
 // Pages that display data held only in memory (or demo output) and must say so.
 export const NOTICE_REQUIRED = [
   'features/projects/ProjectsOverviewPage.jsx',
-  'features/projects/ProjectWorkspacePage.jsx',
   'features/memory/MemoryPage.jsx',
-  'features/history/HistoryPage.jsx',
-  'features/library/LibraryPage.jsx',
   'features/general-ai/EmptyStart.jsx',
-  'features/general-ai/ConversationView.jsx',
 ]
 
 function* walk(dir) {

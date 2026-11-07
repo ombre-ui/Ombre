@@ -7,7 +7,6 @@ import './mentors.css'
 export default function MentorProfilePage() {
   const { categoryId, subcategoryId, mentorId } = useParams()
   const navigate = useNavigate()
-  const { createConversation } = useOmbreData()
   const found = getMentor(categoryId, subcategoryId, mentorId)
 
   if (!found) {
@@ -18,8 +17,7 @@ export default function MentorProfilePage() {
   const { category, subcategory, mentor } = found
 
   function handleStartConversation() {
-    const id = createConversation({ mentorId: mentor.id })
-    navigate(`/app/general/${id}`)
+    navigate(`/app/general?mentorId=${encodeURIComponent(mentor.id)}`)
   }
 
   return (

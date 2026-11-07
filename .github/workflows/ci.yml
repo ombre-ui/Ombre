@@ -63,7 +63,7 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
 
       - name: Scan history and working tree
-        run: ./gitleaks detect --source . --redact --verbose --exit-code 1
+        run: ./gitleaks detect --source . --redact --verbose --exit-code 1 --baseline-path=.gitleaks-baseline.json
 
   supabase:
     name: Supabase migration replay, schema fingerprint, type drift

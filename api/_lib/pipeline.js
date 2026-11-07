@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { ApiError, methodNotAllowed } from './errors.js'
 import { checkRequestOrigin } from './csrf.js'
 import { parseJsonObject } from './validate.js'
+import { matchPath, parseQuery } from './params.js'
 import { describeAuthError } from './logger.js'
 
 export const MAX_BODY_BYTES = 4096
@@ -20,11 +21,11 @@ function baseHeaders(requestId) {
   }
 }
 
-async function readBody(request) {
+async function readBody(request, limit) {
   const declared = Number(request.headers.get('content-length'))
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) throw new ApiError(413, 'payload_too_large')
+  if (Number.isFinite(declared) && declared > limit) throw new ApiError(413, 'payload_too_large')
   const text = await request.text()
-  if (Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES) throw new ApiError(413, 'payload_too_large')
+  if (Buffer.byteLength(text, 'utf8') > limit) throw new ApiError(413, 'payload_too_large')
   return text
 }
 
@@ -42,14 +43,23 @@ function allowedKeysFor(bodyOption, method) {
 }
 
 // Builds a route: (Request) => Promise<Response>.
-//   options.methods   allowed methods (others -> 405)
-//   options.body      see allowedKeysFor
-//   fn(ctx)           returns { status?, body } or throws ApiError
+//   options.methods        allowed methods (others -> 405)
+//   options.body           see allowedKeysFor
+//   options.maxBodyBytes   request body limit for this route (default MAX_BODY_BYTES). Exposed as
+//                          route.maxBodyBytes so the Node adapter enforces the same limit while streaming.
+//   options.path           optional path template such as '/api/conversations/:id/messages'. Path parameters
+//                          must be canonical lowercase UUIDs (400 otherwise); a non-matching path is 404.
+//                          Result: ctx.params.
+//   options.query          optional map of allowed query parameter -> parser. Unknown or repeated parameters are
+//                          rejected (400). Without this option the query string is not inspected (A2/A3 routes).
+//                          Result: ctx.query.
+//   fn(ctx)                returns { status?, body } or throws ApiError. status 204 sends no body.
 export function createRoute({ getConfig, createSupabase, logger }, options, fn) {
   const methods = options.methods
   const bodyOption = options.body ?? null
+  const maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES
 
-  return async function route(request) {
+  async function route(request) {
     const started = Date.now()
     const requestId = randomUUID()
     const url = new URL(request.url)
@@ -65,14 +75,17 @@ export function createRoute({ getConfig, createSupabase, logger }, options, fn) 
       const config = getConfig()
       const origin = checkRequestOrigin(request, config)
 
+      const params = options.path ? matchPath(url.pathname, options.path) : {}
+      const query = options.query ? parseQuery(url, options.query) : {}
+
       const allowedKeys = allowedKeysFor(bodyOption, request.method)
       let body
       if (allowedKeys) {
         const type = (request.headers.get('content-type') || '').toLowerCase()
         if (!/^application\/json(\s*;.*)?$/.test(type)) throw new ApiError(415, 'unsupported_media_type')
-        body = parseJsonObject(await readBody(request), allowedKeys)
+        body = parseJsonObject(await readBody(request, maxBodyBytes), allowedKeys)
       } else if (request.method !== 'GET' && request.method !== 'HEAD') {
-        await readBody(request) // enforce the size limit even when the body is ignored
+        await readBody(request, maxBodyBytes) // enforce the size limit even when the body is ignored
       }
 
       let supa = null
@@ -83,6 +96,8 @@ export function createRoute({ getConfig, createSupabase, logger }, options, fn) 
         config,
         origin,
         body,
+        params,
+        query,
         supa() {
           if (!supa) {
             supa = createSupabase(request, config)
@@ -100,7 +115,7 @@ export function createRoute({ getConfig, createSupabase, logger }, options, fn) 
 
       const result = await fn(ctx)
       status = result.status ?? 200
-      payload = result.body ?? {}
+      payload = status === 204 ? null : (result.body ?? {})
     } catch (error) {
       if (error instanceof ApiError) {
         apiError = error
@@ -133,6 +148,10 @@ export function createRoute({ getConfig, createSupabase, logger }, options, fn) 
       apiError: apiError ? apiError.code : undefined,
     })
 
-    return new Response(JSON.stringify(payload), { status, headers })
+    // A 204 response must not carry a body.
+    return new Response(status === 204 ? null : JSON.stringify(payload), { status, headers })
   }
+
+  route.maxBodyBytes = maxBodyBytes
+  return route
 }

@@ -1,17 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { useOmbreData } from '../../lib/store.jsx'
-import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import { getMentorWithPath } from '../mentors/categories.js'
 import './history.css'
 
 const BUCKET_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older']
-
-const STATUS_LABEL = {
-  pending: 'A demo reply is still pending',
-  error: 'The last response failed',
-}
 
 function bucketFor(dateStr) {
   const d = new Date(dateStr)
@@ -31,21 +25,31 @@ function formatMeta(conversation) {
     hour: 'numeric',
     minute: '2-digit',
   })
-  const count = conversation.messages.length
+  const count = conversation.messageCount ?? conversation.messages?.length ?? 0
   return `${time} · ${count} ${count === 1 ? 'message' : 'messages'}`
 }
 
 export default function HistoryPage() {
-  // History reads the same Conversation records General AI and mentors write.
-  // listConversations() is the integration point to swap for real history
-  // from Supabase later; nothing on this page defines its own conversation model.
   const { listConversations, getProject } = useOmbreData()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const [conversations, setConversations] = useState([])
+  const [loadError, setLoadError] = useState('')
 
-  // A conversation with no messages yet (e.g. "Start conversation" on a mentor
-  // profile, then leaving) has nothing to return to, so it isn't listed.
-  const conversations = listConversations().filter((c) => c.messages.length > 0)
+  useEffect(() => {
+    let active = true
+    listConversations().then((result) => {
+      if (!active) return
+      if (!result.ok) {
+        setLoadError(result.error?.message ?? 'Couldn’t load history.')
+        setConversations([])
+        return
+      }
+      setLoadError('')
+      setConversations((result.data.conversations ?? []).filter((c) => (c.messageCount ?? c.messages?.length ?? 0) > 0))
+    })
+    return () => { active = false }
+  }, [listConversations])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -73,7 +77,7 @@ export default function HistoryPage() {
         <p className="text-body text-secondary">Where your thinking has been.</p>
       </header>
 
-      <PreviewNotice kind="history" />
+      {loadError && <p className="text-body-sm text-secondary">{loadError}</p>}
 
       <div className="history-search">
         <Search size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -106,8 +110,6 @@ export default function HistoryPage() {
                 .map((c) => {
                   const mentorContext = c.mentorId ? getMentorWithPath(c.mentorId) : null
                   const project = c.projectId ? getProject(c.projectId) : null
-                  const lastStatus = c.messages[c.messages.length - 1]?.status
-                  const statusLabel = STATUS_LABEL[lastStatus]
                   return (
                     <li key={c.id}>
                       <button
@@ -118,14 +120,6 @@ export default function HistoryPage() {
                         <span className="history-item-main">
                           <span className="history-item-title-row">
                             <span className="text-body history-item-title">{c.title}</span>
-                            {statusLabel && (
-                              <span
-                                className={`history-status is-${lastStatus}`}
-                                role="img"
-                                aria-label={statusLabel}
-                                title={statusLabel}
-                              />
-                            )}
                           </span>
                           <span className="text-meta">{formatMeta(c)}</span>
                         </span>
