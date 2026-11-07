@@ -4,7 +4,6 @@
 // Emails are read from the local mail catcher (Mailpit) at MAIL_API (default http://127.0.0.1:54324).
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto' // TEMP DIAG (remove with the rest of the PKCE diagnostic)
 
 const RUN = process.env.AUTH_INTEGRATION === '1'
 const ORIGIN = 'http://localhost:3000'
@@ -17,21 +16,6 @@ const suite = RUN ? test : test.skip
 if (RUN) {
   assert.ok(process.env.SUPABASE_URL, 'SUPABASE_URL is required for AUTH_INTEGRATION=1')
   assert.ok(process.env.SUPABASE_PUBLISHABLE_KEY, 'SUPABASE_PUBLISHABLE_KEY is required for AUTH_INTEGRATION=1')
-}
-
-// TEMP DIAG: hashes only, never the verifier itself
-const sha = (s) => createHash('sha256').update(s).digest('base64url')
-function describeCookie(name, raw) {
-  try {
-    const json = raw.startsWith('base64-') ? Buffer.from(raw.slice(7), 'base64url').toString('utf8') : raw
-    const v = JSON.parse(json)
-    if (typeof v === 'string') {
-      const [verifier, suffix] = v.split('/')
-      return { name, kind: 'verifier', verifierSha: sha(verifier), suffix: suffix ?? null }
-    }
-    if (Array.isArray(v)) return { name, kind: 'index', flowIds: v }
-  } catch {}
-  return { name, kind: 'other', rawLen: raw.length }
 }
 
 function browser(routes) {
@@ -149,79 +133,27 @@ suite('auth flow: signup -> PKCE confirm -> session -> signout -> signin -> reco
   assert.equal((await browser(routes).call('resetPassword', { path: '/api/auth/reset-password', body: { password: NEW_PASSWORD } })).status, 401)
   assert.equal((await b.call('resetPassword', { path: '/api/auth/reset-password', body: { password: 'short' } })).status, 400)
 
-  // TEMP DIAG: spy on PKCE values sent to local Supabase Auth; fetch is restored in `finally`.
-  const realFetch = globalThis.fetch
-  const diag = { recover: [], token: [] }
-  globalThis.fetch = async (input, init) => {
-    try {
-      const url = typeof input === 'string' ? input : (input && input.url) || String(input)
-      if (typeof init?.body === 'string' && (url.includes('/auth/v1/recover') || url.includes('grant_type=pkce'))) {
-        const body = JSON.parse(init.body)
-        if (url.includes('/auth/v1/recover')) {
-          diag.recover.push({ email: body.email, challenge: body.code_challenge, method: body.code_challenge_method, verifierSha: body.code_verifier ? sha(body.code_verifier) : null })
-        } else {
-          diag.token.push({ authCode8: String(body.auth_code).slice(0, 8), verifierSha: body.code_verifier ? sha(body.code_verifier) : null })
-        }
-      }
-    } catch { /* diagnostics must never break a request */ }
-    return realFetch(input, init)
-  }
-  try {
-    // recovery (PKCE) in a fresh browser: forgot -> link -> callback(recovery) -> reset -> signin with new password
-    const r = browser(routes)
-    const forgot = await r.call('forgotPassword', { path: '/api/auth/forgot-password', body: { email } })
-    assert.deepEqual(forgot.body, { ok: true })
+  // recovery (PKCE) in a fresh browser: forgot -> link -> callback(recovery) -> reset -> signin with new password
+  const r = browser(routes)
+  assert.deepEqual((await r.call('forgotPassword', { path: '/api/auth/forgot-password', body: { email } })).body, { ok: true })
 
-    const neutral = browser(routes)
-    assert.deepEqual(
-      (await neutral.call('forgotPassword', {
-        path: '/api/auth/forgot-password',
-        body: { email: `nobody-${Date.now()}@example.com` },
-      })).body,
-      { ok: true },
-    )
-    const link = await latestMailLink(email, /reset|recover/i)
-    const rec = await codeFromLink(link)
-    assert.equal(rec.path, '/auth/callback/recovery')
-
-    const jarBefore = Array.from(r.jar, ([k, v]) => describeCookie(k, v))
-    const exchanged = await r.call('callback', { path: '/api/auth/callback', body: { code: rec.code, purpose: 'recovery' } })
-
-    // TEMP DIAG output (hashes only)
-    const mine = diag.recover.filter((x) => x.email === email)
-    const fixed = jarBefore.find((c) => c.kind === 'verifier' && !c.name.includes('-flow-'))
-    const slots = jarBefore.filter((c) => c.kind === 'verifier' && c.name.includes('-flow-'))
-    const linkUrl = new URL(link)
-    console.log('PKCE_DIAG', JSON.stringify({
-      email,
-      recoverCallsForEmail: mine.length,
-      recoverAll: diag.recover,
-      tokenCalls: diag.token,
-      tokenShaMatchesRecoverChallenge: diag.token.map((t) => mine.some((m) => m.challenge === t.verifierSha)),
-      fixedCookieShaMatchesChallenge: fixed ? mine.some((m) => m.challenge === fixed.verifierSha) : null,
-      slotCookieShaMatchesChallenge: slots.map((s) => ({ name: s.name, match: mine.some((m) => m.challenge === s.verifierSha) })),
-      forgotSetCookies: forgot.setCookies.map((sc) => {
-        const [p] = sc.split(';')
-        const i = p.indexOf('=')
-        return describeCookie(p.slice(0, i), decodeURIComponent(p.slice(i + 1)))
-      }),
-      jarBeforeCallback: jarBefore,
-      linkType: linkUrl.searchParams.get('type'),
-      linkToken12: (linkUrl.searchParams.get('token') || '').slice(0, 12),
-      code8: rec.code.slice(0, 8),
-      callbackStatus: exchanged.status,
-      callbackError: exchanged.body && exchanged.body.error ? exchanged.body.error.code : null,
-    }, null, 2))
-
-    console.log('RECOVERY_CALLBACK_DIAGNOSTIC', JSON.stringify(exchanged))
-    assert.equal(exchanged.status, 200, JSON.stringify(exchanged))
-    assert.equal(exchanged.body.next, '/reset-password')
-    assert.equal((await r.call('resetPassword', { path: '/api/auth/reset-password', body: { password: NEW_PASSWORD } })).status, 200)
-    assert.equal((await browser(routes).call('signin', { path: '/api/auth/signin', body: { email, password: NEW_PASSWORD } })).status, 200)
-    assert.equal((await browser(routes).call('signin', { path: '/api/auth/signin', body: { email, password: PASSWORD } })).status, 401)
-  } finally {
-    globalThis.fetch = realFetch
-  }
+  const neutral = browser(routes)
+  assert.deepEqual(
+    (await neutral.call('forgotPassword', {
+      path: '/api/auth/forgot-password',
+      body: { email: `nobody-${Date.now()}@example.com` },
+    })).body,
+    { ok: true },
+  )
+  const rec = await codeFromLink(await latestMailLink(email, /reset|recover/i))
+  assert.equal(rec.path, '/auth/callback/recovery')
+  const exchanged = await r.call('callback', { path: '/api/auth/callback', body: { code: rec.code, purpose: 'recovery' } })
+  console.log('RECOVERY_CALLBACK_DIAGNOSTIC', JSON.stringify(exchanged))
+  assert.equal(exchanged.status, 200, JSON.stringify(exchanged))
+  assert.equal(exchanged.body.next, '/reset-password')
+  assert.equal((await r.call('resetPassword', { path: '/api/auth/reset-password', body: { password: NEW_PASSWORD } })).status, 200)
+  assert.equal((await browser(routes).call('signin', { path: '/api/auth/signin', body: { email, password: NEW_PASSWORD } })).status, 200)
+  assert.equal((await browser(routes).call('signin', { path: '/api/auth/signin', body: { email, password: PASSWORD } })).status, 401)
 })
 
 suite('PKCE link opened in a different browser fails with the wrong-browser error', async () => {
