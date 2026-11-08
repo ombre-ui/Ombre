@@ -47,7 +47,7 @@ test('the recorded baseline is pinned to the live A4 schema', () => {
       'tablegrant|26|17c3845fad893d9925754981e0452c3b',
       'trigger|10|dd235eb73d7fc7ea73b34f95ccb39b0e',
       'TOTAL|227|bb9bd233ebca7885a70929d7cb9e2c58',
-    ].join('\n'),
+    ].join('\n') + '\n',
   )
 })
 
