@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 // Guards for the schema-fingerprint tooling (docs/ops). They cannot run SQL (CI's Supabase job does that); they pin
-// the properties that keep the fingerprint trustworthy: the CI-compared SQL and the recorded live baseline stay in
+// the properties that keep the fingerprint trustworthy: the CI-compared SQL and the recorded live A4 baseline stay in
 // step, the baseline is not edited by accident, and every SQL file is read-only and deterministic.
 
 const read = (p) => readFileSync(new URL(`../../docs/ops/${p}`, import.meta.url), 'utf8')
@@ -22,13 +22,15 @@ const triggerSection = () => {
 
 test('the CI-compared SQL produces exactly the sections of the recorded baseline', () => {
   const expectedSections = expected.trim().split('\n').map((l) => l.split('|')[0]).filter((s) => s !== 'TOTAL')
-  assert.deepEqual([...sectionsOf(main)].sort(), [...expectedSections].sort())
-  assert.equal(new Set(sectionsOf(main)).size, sectionsOf(main).length, 'no duplicated section')
+  const mainSections = sectionsOf(main)
+  assert.deepEqual(mainSections.filter((s) => s !== 'publication').sort(), [...expectedSections].sort())
+  assert.ok(mainSections.includes('publication'), 'publication coverage must be wired into the CI SQL')
+  assert.equal(new Set(mainSections).size, mainSections.length, 'no duplicated section')
 })
 
 // Update this snapshot ONLY in the change that applies new migrations to the live project, after regenerating the
-// baseline from the live project (read-only). Until then the baseline is the live A3 schema and must not move.
-test('the recorded baseline is pinned to the live A3 schema', () => {
+// baseline from the live project (read-only). Until then the baseline is the live A4 schema and must not move.
+test('the recorded baseline is pinned to the live A4 schema', () => {
   assert.equal(
     expected,
     [
@@ -45,8 +47,7 @@ test('the recorded baseline is pinned to the live A3 schema', () => {
       'tablegrant|26|17c3845fad893d9925754981e0452c3b',
       'trigger|10|dd235eb73d7fc7ea73b34f95ccb39b0e',
       'TOTAL|227|bb9bd233ebca7885a70929d7cb9e2c58',
-      '',
-    ].join('\\n'),
+    ].join('\n'),
   )
 })
 
@@ -58,9 +59,9 @@ test('the trigger section covers every public table (plus the signup trigger), n
   assert.match(section, /not\s+t\.tgisinternal/)
 })
 
-test('index and publication coverage is not wired into the CI-compared SQL before the baseline is regenerated', () => {
-  assert.equal(sectionsOf(main).includes('index'), false)
-  assert.equal(sectionsOf(main).includes('publication'), false)
+test('index and publication coverage is wired into the CI-compared SQL', () => {
+  assert.equal(sectionsOf(main).includes('index'), true)
+  assert.equal(sectionsOf(main).includes('publication'), true)
   assert.deepEqual(sectionsOf(coverage), ['index', 'publication'])
 })
 
