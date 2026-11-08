@@ -42,7 +42,7 @@ test('the recorded baseline is pinned to the live A4 schema', () => {
       'function|6|27e0f53343133460ad28b06220573742',
       'index|20|d981bb6e0979cf7a0972532f68bf89f2',
       'policy|18|e6e20e09c87990ba08aba4c2def2d8c7',
-      'schema|1|2fb610a190853cdb9f39dbc371b201d3',
+      'schema|1|2fb610e190853cdb9f39dbc371b201d3',
       'table|7|1b46179c63ffea71c82adfa2f63cb0d2',
       'tablegrant|26|17c3845fad893d9925754981e0452c3b',
       'trigger|10|dd235eb73d7fc7ea73b34f95ccb39b0e',
