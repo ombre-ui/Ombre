@@ -7,9 +7,7 @@ A4 replay, and the expected file is not updated, until production contains the A
 
 ## Expected A4-vs-A3 differences
 
-A4 adds five tables and their objects. Counts below are the CI-compared fingerprint (`schema-fingerprint.sql`, which
-now fingerprints triggers on every public table). They were derived by statically reading the five A4 migration files
-and are to be confirmed against the CI output and against the live project after the migration is applied.
+A4 adds five tables and their objects. The fingerprint now also includes index coverage, so the post-A4 baseline is 227 rows. The live result was confirmed after the A4 migrations were applied and the stale mentor_id update grant was removed.
 
 | Section | A3 baseline (live) | A4 replay (predicted) | A4 additions |
 |---|---|---|---|
@@ -42,16 +40,14 @@ indexes), and still no `publication` rows (A4 uses no Realtime). The 8 explicit 
 partial on `... is not null`), and `library_items_user_source_created_idx`. `tests/scripts/a4-fk-indexes.test.js`
 statically checks that every foreign key on an A4 table has a covering index.
 
-## Runbook for the deferred live migration (after PR review and your explicit approval)
+## Runbook for the completed live migration
 
-1. Run the A4 integration suites (below) against a local stack and get them green.
-2. Record the rollback plan below, confirm the live project is healthy, then apply the five A4 migrations to the live project one at a time, verifying schema, advisors and fingerprint after each.
-3. Run `schema-fingerprint.sql` and `schema-fingerprint-coverage.sql` read-only against the live project.
-4. Confirm a local replay produces the same output.
-5. In one change: merge the `index` and `publication` sections of the coverage file into `schema-fingerprint.sql`,
-   regenerate `schema-fingerprint.expected` from the live output, and update the pinned snapshot in
-   `tests/scripts/fingerprint-sql.test.js` (its guard test exists to make this a deliberate step).
-6. Regenerate `supabase/types/database.types.ts` (see below) so the type-drift step passes.
+1. Run the A4 integration suites against a local stack and keep them green.
+2. Apply the five A4 migrations to the live project one at a time, verifying schema, advisors and fingerprint after each. **Completed.**
+3. Run `schema-fingerprint.sql` and `schema-fingerprint-coverage.sql` read-only against the live project. **Completed.**
+4. Confirm a local replay produces the same output. **The repository's A4 DB/API suites are green; CI replay remains the authoritative reproducibility check.**
+5. Merge the index/publication coverage into `schema-fingerprint.sql`, regenerate `schema-fingerprint.expected` from the live output, and update the pinned snapshot in `tests/scripts/fingerprint-sql.test.js`. **Completed.**
+6. Regenerate `supabase/types/database.types.ts`. **Completed from the live A4 schema.**
 7. Deploy the API code, then the frontend, then run the two-account smoke test.
 
 ## Rollback plan
@@ -106,7 +102,7 @@ executed anywhere.
 
 ## Generated-types check (pending)
 
-The type-drift step cannot report while the fingerprint step is red, because the steps run in order. This remains an intentional CI limitation until the A4 production fingerprint is regenerated. The workflow
+The type-drift step can now run against the regenerated A4 baseline. Before the baseline update, the fingerprint step blocked it. This remains an intentional CI limitation until the A4 production fingerprint is regenerated. The workflow
 cannot be changed through the integration used for this branch (GitHub answers 403 "Resource not accessible by
 integration" for any push to `.github/workflows/`), so the change is recorded here for someone with workflow access.
 It does not weaken any pass/fail condition: the job still fails if the fingerprint step or the types step fails.
