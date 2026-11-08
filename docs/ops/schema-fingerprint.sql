@@ -60,6 +60,12 @@ with r as (
   union all
   select 'schema', n.nspname::text||' anon_usage='||has_schema_privilege('anon',n.oid,'USAGE')::text||' authenticated_usage='||has_schema_privilege('authenticated',n.oid,'USAGE')::text
     from pg_namespace n where n.nspname='private'
+  union all
+  select 'index'::text sec, i.tablename::text||' '||i.indexname::text||' '||i.indexdef line
+    from pg_indexes i where i.schemaname='public'
+  union all
+  select 'publication', pt.pubname::text||' '||pt.schemaname::text||'.'||pt.tablename::text
+    from pg_publication_tables pt where pt.schemaname='public'
 )
 select coalesce(sec,'TOTAL') as section, count(*) as n, md5(string_agg(line, E'\n' order by line collate "C")) as md5
 from r group by rollup(sec) order by sec nulls last;
