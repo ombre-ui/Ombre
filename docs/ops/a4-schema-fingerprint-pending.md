@@ -45,7 +45,7 @@ statically checks that every foreign key on an A4 table has a covering index.
 ## Runbook for the deferred live migration (after PR review and your explicit approval)
 
 1. Run the A4 integration suites (below) against a local stack and get them green.
-2. Apply the five A4 migrations to the live project one at a time, verifying schema, advisors and fingerprint after each.
+2. Record the rollback plan below, confirm the live project is healthy, then apply the five A4 migrations to the live project one at a time, verifying schema, advisors and fingerprint after each.
 3. Run `schema-fingerprint.sql` and `schema-fingerprint-coverage.sql` read-only against the live project.
 4. Confirm a local replay produces the same output.
 5. In one change: merge the `index` and `publication` sections of the coverage file into `schema-fingerprint.sql`,
@@ -53,6 +53,20 @@ statically checks that every foreign key on an A4 table has a covering index.
    `tests/scripts/fingerprint-sql.test.js` (its guard test exists to make this a deliberate step).
 6. Regenerate `supabase/types/database.types.ts` (see below) so the type-drift step passes.
 7. Deploy the API code, then the frontend, then run the two-account smoke test.
+
+## Rollback plan
+
+A4 is additive: the five migrations create only the A4 tables, indexes, constraints, policies, triggers, and functions described above; they do not alter the existing A3 tables or migrations. If a live migration must be rolled back before the A4 API/frontend is deployed, stop the rollout and remove only the objects created by the already-applied A4 migrations, in reverse migration order, after confirming no A4 data needs to be retained. Do not roll back by editing or re-running historical migration files. Prefer fixing forward when an A4 migration has been applied and A4 data has already been accepted by the application; a destructive rollback then requires an explicit data-loss decision.
+
+Reverse order is:
+
+1. `20261020120400_a4_library_items.sql`
+2. `20261020120300_a4_saved_items.sql`
+3. `20261020120200_a4_messages.sql`
+4. `20261020120100_a4_conversations.sql`
+5. `20261020120000_a4_projects.sql`
+
+Before any destructive rollback, take a database backup/snapshot if available and verify that no dependent A4 objects or application deployment remain active. The exact `DROP` statements should be generated from the applied migration definitions rather than improvised during an incident.
 
 ## A4 integration tests (real database)
 
@@ -92,7 +106,7 @@ executed anywhere.
 
 ## Generated-types check (pending)
 
-The type-drift step cannot report while the fingerprint step is red, because the steps run in order. The workflow
+The type-drift step cannot report while the fingerprint step is red, because the steps run in order. This remains an intentional CI limitation until the A4 production fingerprint is regenerated. The workflow
 cannot be changed through the integration used for this branch (GitHub answers 403 "Resource not accessible by
 integration" for any push to `.github/workflows/`), so the change is recorded here for someone with workflow access.
 It does not weaken any pass/fail condition: the job still fails if the fingerprint step or the types step fails.
