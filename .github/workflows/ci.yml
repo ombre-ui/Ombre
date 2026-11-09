@@ -150,12 +150,17 @@ jobs:
         run: |
           expected=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]{14})_(.*)\.sql$/\1 \2/' | sort)
           actual=$(docker exec supabase_db_ombre psql -U postgres -At -c "select version||' '||name from supabase_migrations.schema_migrations order by version")
-          echo "expected (from repo files):"; echo "$expected"
-          echo "actual (local database):"; echo "$actual"
-          if [ "$expected" != "$actual" ]; then
+          printf '%s\n' "$expected" > "$RUNNER_TEMP/migrations.expected"
+          printf '%s\n' "$actual" > "$RUNNER_TEMP/migrations.actual"
+          echo "expected (from repo files):"
+          cat "$RUNNER_TEMP/migrations.expected"
+          echo "actual (local database):"
+          cat "$RUNNER_TEMP/migrations.actual"
+          if ! diff -u "$RUNNER_TEMP/migrations.expected" "$RUNNER_TEMP/migrations.actual"; then
             echo "Migration history mismatch"
             exit 1
           fi
+          echo "migration history matches"
 
       # A1 baseline: expected values were computed read-only against the live project after
       # migration 4. When a later migration changes the schema, regenerate the expected file
