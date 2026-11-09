@@ -8,7 +8,7 @@ alter table public.conversations
 alter table public.conversations
   drop constraint conversations_title_check,
   drop constraint conversations_mentor_id_check,
-  drop constraint conversations_project_user_fk;
+  drop constraint conversations_project_fk;
 
 alter table public.conversations
   add constraint conversations_title_check
@@ -24,14 +24,56 @@ create index conversations_project_last_message_idx
   on public.conversations (project_id, last_message_at desc, id desc)
   where project_id is not null;
 
-alter policy "Users can create conversations when history is enabled"
-  on public.conversations rename to "Users can create their own conversations while history is on";
+do $
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_policies
+    where schemaname = 'public'
+      and tablename = 'conversations'
+      and policyname = 'Users can create conversations when history is enabled'
+  ) and not exists (
+    select 1
+    from pg_catalog.pg_policies
+    where schemaname = 'public'
+      and tablename = 'conversations'
+      and policyname = 'Users can create their own conversations while history is on'
+  ) then
+    alter policy "Users can create conversations when history is enabled"
+      on public.conversations rename to "Users can create their own conversations while history is on";
+  end if;
 
-alter trigger conversations_enforce_user_row_cap on public.conversations
-  rename to conversations_enforce_row_cap;
+  if exists (
+    select 1
+    from pg_catalog.pg_trigger
+    where tgrelid = 'public.conversations'::regclass
+      and tgname = 'conversations_enforce_user_row_cap'
+  ) and not exists (
+    select 1
+    from pg_catalog.pg_trigger
+    where tgrelid = 'public.conversations'::regclass
+      and tgname = 'conversations_enforce_row_cap'
+  ) then
+    alter trigger conversations_enforce_user_row_cap on public.conversations
+      rename to conversations_enforce_row_cap;
+  end if;
 
-alter trigger projects_enforce_user_row_cap on public.projects
-  rename to projects_enforce_row_cap;
+  if exists (
+    select 1
+    from pg_catalog.pg_trigger
+    where tgrelid = 'public.projects'::regclass
+      and tgname = 'projects_enforce_user_row_cap'
+  ) and not exists (
+    select 1
+    from pg_catalog.pg_trigger
+    where tgrelid = 'public.projects'::regclass
+      and tgname = 'projects_enforce_row_cap'
+  ) then
+    alter trigger projects_enforce_user_row_cap on public.projects
+      rename to projects_enforce_row_cap;
+  end if;
+end
+$;
 
 create or replace function private.enforce_user_row_cap()
 returns trigger
