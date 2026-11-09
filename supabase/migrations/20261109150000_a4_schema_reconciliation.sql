@@ -7,8 +7,27 @@ alter table public.conversations
 
 alter table public.conversations
   drop constraint conversations_title_check,
-  drop constraint conversations_mentor_id_check,
-  drop constraint conversations_project_fk;
+  drop constraint conversations_mentor_id_check;
+
+do $
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_constraint
+    where conrelid = 'public.conversations'::regclass
+      and conname = 'conversations_project_user_fk'
+  ) then
+    alter table public.conversations drop constraint conversations_project_user_fk;
+  elsif exists (
+    select 1
+    from pg_catalog.pg_constraint
+    where conrelid = 'public.conversations'::regclass
+      and conname = 'conversations_project_fk'
+  ) then
+    alter table public.conversations drop constraint conversations_project_fk;
+  end if;
+end
+$;
 
 alter table public.conversations
   add constraint conversations_title_check
