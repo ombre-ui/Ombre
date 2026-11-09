@@ -1,15 +1,10 @@
 -- Reconcile production with the canonical A4 schema already represented by the migration chain.
--- This is forward-only: it changes definitions/names, not user data.
---
--- Production had been created from an earlier A4 draft. The repository migrations were subsequently
--- tightened, so this migration makes the live schema reproduce the current migration replay exactly.
+-- Forward-only schema reconciliation; no user data is modified.
 
--- conversations column defaults/nullability.
 alter table public.conversations
   alter column last_message_at set default now(),
   alter column last_message_at set not null;
 
--- conversations constraints and composite project FK.
 alter table public.conversations
   drop constraint conversations_title_check,
   drop constraint conversations_mentor_id_check,
@@ -24,24 +19,20 @@ alter table public.conversations
     foreign key (project_id, user_id) references public.projects (id, user_id)
     on delete set null (project_id);
 
--- Canonical conversation project index.
 drop index public.conversations_project_last_message_idx;
 create index conversations_project_last_message_idx
   on public.conversations (project_id, last_message_at desc, id desc)
   where project_id is not null;
 
--- Canonical policy name.
 alter policy "Users can create conversations when history is enabled"
   on public.conversations rename to "Users can create their own conversations while history is on";
 
--- Canonical row-cap trigger names.
-alter table public.conversations
-  rename trigger conversations_enforce_user_row_cap to conversations_enforce_row_cap;
+alter trigger conversations_enforce_user_row_cap on public.conversations
+  rename to conversations_enforce_row_cap;
 
-alter table public.projects
-  rename trigger projects_enforce_user_row_cap to projects_enforce_row_cap;
+alter trigger projects_enforce_user_row_cap on public.projects
+  rename to projects_enforce_row_cap;
 
--- Canonical row-cap implementation from the current A4 migration.
 create or replace function private.enforce_user_row_cap()
 returns trigger
 language plpgsql
