@@ -9,7 +9,7 @@ alter table public.conversations
   drop constraint conversations_title_check,
   drop constraint conversations_mentor_id_check;
 
-do $
+do $$
 begin
   if exists (
     select 1
@@ -27,7 +27,7 @@ begin
     alter table public.conversations drop constraint conversations_project_fk;
   end if;
 end
-$;
+$$;
 
 alter table public.conversations
   add constraint conversations_title_check
@@ -43,7 +43,7 @@ create index conversations_project_last_message_idx
   on public.conversations (project_id, last_message_at desc, id desc)
   where project_id is not null;
 
-do $
+do $$
 begin
   if exists (
     select 1
@@ -92,7 +92,7 @@ begin
       rename to projects_enforce_row_cap;
   end if;
 end
-$;
+$$;
 
 create or replace function private.enforce_user_row_cap()
 returns trigger
