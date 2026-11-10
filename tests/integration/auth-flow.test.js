@@ -136,11 +136,20 @@ suite('auth flow: signup -> PKCE confirm -> session -> signout -> signin -> reco
   // recovery (PKCE) in a fresh browser: forgot -> link -> callback(recovery) -> reset -> signin with new password
   const r = browser(routes)
   assert.deepEqual((await r.call('forgotPassword', { path: '/api/auth/forgot-password', body: { email } })).body, { ok: true })
-  assert.deepEqual((await r.call('forgotPassword', { path: '/api/auth/forgot-password', body: { email: `nobody-${Date.now()}@example.com` } })).body, { ok: true })
+
+  const neutral = browser(routes)
+  assert.deepEqual(
+    (await neutral.call('forgotPassword', {
+      path: '/api/auth/forgot-password',
+      body: { email: `nobody-${Date.now()}@example.com` },
+    })).body,
+    { ok: true },
+  )
   const rec = await codeFromLink(await latestMailLink(email, /reset|recover/i))
   assert.equal(rec.path, '/auth/callback/recovery')
   const exchanged = await r.call('callback', { path: '/api/auth/callback', body: { code: rec.code, purpose: 'recovery' } })
-  assert.equal(exchanged.status, 200)
+  console.log('RECOVERY_CALLBACK_DIAGNOSTIC', JSON.stringify(exchanged))
+  assert.equal(exchanged.status, 200, JSON.stringify(exchanged))
   assert.equal(exchanged.body.next, '/reset-password')
   assert.equal((await r.call('resetPassword', { path: '/api/auth/reset-password', body: { password: NEW_PASSWORD } })).status, 200)
   assert.equal((await browser(routes).call('signin', { path: '/api/auth/signin', body: { email, password: NEW_PASSWORD } })).status, 200)

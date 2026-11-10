@@ -2,7 +2,7 @@ import Composer from './Composer.jsx'
 import PreviewNotice from '../../layout/PreviewNotice.jsx'
 import './general-ai.css'
 
-export default function EmptyStart({ onSend }) {
+export default function EmptyStart({ onSend, disabled = false }) {
   return (
     <div className="empty-start motion-reveal">
       <h1 className="text-heading-lg empty-start-heading">What are you thinking?</h1>
@@ -11,7 +11,7 @@ export default function EmptyStart({ onSend }) {
       </p>
       <PreviewNotice kind="demo" />
       <div className="empty-start-composer">
-        <Composer onSend={onSend} autoFocus />
+        <Composer onSend={onSend} disabled={disabled} autoFocus />
       </div>
     </div>
   )

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import MessageBubble from './MessageBubble.jsx'
 import './general-ai.css'
 
-export default function MessageList({ messages, onRetry }) {
+export default function MessageList({ messages, onRetry, isMessageSaved, onToggleSave, savingMessageId }) {
   const endRef = useRef(null)
 
   useEffect(() => {
@@ -15,7 +15,15 @@ export default function MessageList({ messages, onRetry }) {
         const prev = messages[i - 1]
         const grouped = prev && prev.role === message.role
         return (
-          <MessageBubble key={message.id} message={message} grouped={grouped} onRetry={onRetry} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            grouped={grouped}
+            onRetry={onRetry}
+            saved={isMessageSaved?.(message.id) ?? false}
+            onToggleSave={onToggleSave}
+            saving={savingMessageId === message.id}
+          />
         )
       })}
       <div ref={endRef} />

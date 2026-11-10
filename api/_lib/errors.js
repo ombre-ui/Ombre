@@ -18,6 +18,9 @@ const MESSAGES = {
   link_wrong_browser: 'Open the link in the same browser you used to request it.',
   signup_failed: 'We could not create the account.',
   reset_failed: 'We could not update the password.',
+  conflict: 'That request conflicts with an earlier one.',
+  limit_reached: 'You have reached a limit. Remove something and try again.',
+  history_disabled: 'History is turned off, so this was not saved.',
   service_unavailable: 'Ombre is temporarily unavailable. Try again shortly.',
   internal_error: 'Something went wrong.',
 }
@@ -39,6 +42,8 @@ export class ApiError extends Error {
 export const badRequest = (code = 'invalid_request') => new ApiError(400, code)
 export const unauthorized = (code = 'unauthenticated') => new ApiError(401, code)
 export const forbidden = (code = 'forbidden') => new ApiError(403, code)
+export const notFound = () => new ApiError(404, 'not_found')
+export const conflict = (code = 'conflict') => new ApiError(409, code)
 export const tooManyRequests = () => new ApiError(429, 'rate_limited')
 export const unavailable = () => new ApiError(503, 'service_unavailable')
 export const methodNotAllowed = (allow) =>

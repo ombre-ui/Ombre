@@ -7,13 +7,33 @@ import { rewriteMatcher, assetRefs, checkDist } from '../../scripts/check-dist-a
 
 const config = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'))
 
+// The SPA fallback is identified by its destination, not by its position or by being the only rewrite: the A4
+// workspace rewrites (to the single /api/workspace function) sit in front of it.
+const spaRewrites = config.rewrites.filter((r) => r.destination === '/index.html')
+const workspaceRewrites = config.rewrites.filter((r) => r.destination === '/api/workspace')
+// Config containing only the SPA fallback: the behaviour assertions below test that rewrite on its own, exactly
+// as they did when it was the only rewrite.
+const spaConfig = { ...config, rewrites: spaRewrites }
+
 test('SPA fallback still exists and points at /index.html', () => {
-  assert.equal(config.rewrites.length, 1)
-  assert.equal(config.rewrites[0].destination, '/index.html')
+  assert.equal(spaRewrites.length, 1, 'exactly one rewrite sends to /index.html')
+  assert.equal(spaRewrites[0].destination, '/index.html')
+  // It stays last, so the API rewrites are evaluated before the catch-all-style fallback.
+  assert.equal(config.rewrites[config.rewrites.length - 1], spaRewrites[0])
+})
+
+test('A4 workspace rewrites point at the single /api/workspace function, before the SPA fallback, and nothing else is rewritten', () => {
+  assert.equal(workspaceRewrites.length, 2, 'one rewrite for /api/<family> and one for /api/<family>/...')
+  for (const rule of workspaceRewrites) {
+    assert.equal(rule.destination, '/api/workspace')
+    assert.ok(config.rewrites.indexOf(rule) < config.rewrites.indexOf(spaRewrites[0]), `${rule.source} must come before the SPA fallback`)
+    assert.match(rule.source, /^\/api\/:__vf\(projects\|conversations\|saved\|library\)(\/:__vp\*)?$/)
+  }
+  assert.equal(config.rewrites.length, workspaceRewrites.length + spaRewrites.length, 'only the workspace rewrites and the SPA fallback exist')
 })
 
 test('client-side routes fall back to index.html', () => {
-  const rewritten = rewriteMatcher(config)
+  const rewritten = rewriteMatcher(spaConfig)
   for (const path of [
     '/', '/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback', '/auth/callback/recovery',
     '/app/general', '/app/general/3f2b8c1e-aaaa-4bbb-8ccc-123456789abc', '/app/projects', '/app/projects/abc',
@@ -25,11 +45,14 @@ test('client-side routes fall back to index.html', () => {
 })
 
 test('static assets, files with an extension and /api/* are never rewritten', () => {
-  const rewritten = rewriteMatcher(config)
+  const rewritten = rewriteMatcher(spaConfig)
   for (const path of [
     '/assets/index-AbC123.js', '/assets/index-AbC123.css', '/assets/nested/chunk-1.js', '/assets/font.woff2',
     '/favicon.ico', '/robots.txt', '/vite.svg', '/index.html',
     '/api/auth/session', '/api/auth/signin', '/api/user/profile', '/api/user/settings',
+    // the A4 API URLs are served by the workspace function and must never be swallowed by the SPA fallback
+    '/api/projects', '/api/projects/3f2b8c1e-7a4d-4e5f-9b6a-1c2d3e4f5a6b', '/api/conversations',
+    '/api/conversations/3f2b8c1e-7a4d-4e5f-9b6a-1c2d3e4f5a6b/messages', '/api/saved', '/api/library',
   ]) {
     assert.ok(!rewritten(path), `${path} must not be rewritten to /index.html`)
   }

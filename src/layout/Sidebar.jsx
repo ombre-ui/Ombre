@@ -6,6 +6,7 @@ import {
   Compass,
   Library as LibraryIcon,
   History as HistoryIcon,
+  Bookmark,
   CircleDot,
   CircleUserRound,
   Settings as SettingsIcon,
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { to: '/app/mentors', label: 'Mentors', icon: Compass },
   { to: '/app/library', label: 'Library', icon: LibraryIcon },
   { to: '/app/history', label: 'History', icon: HistoryIcon },
+  { to: '/app/saved', label: 'Saved', icon: Bookmark },
   { to: '/app/memory', label: 'Memory', icon: CircleDot },
 ]
 

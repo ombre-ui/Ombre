@@ -1,0 +1,42 @@
+[
+ {
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 9,
+  "EndLine": 9,
+  "StartColumn": 15,
+  "EndColumn": 59,
+  "Match": "KEY1 = 'REDACTED'",
+  "Secret": "REDACTED",
+  "File": "tests/api/workspace-helpers.js",
+  "SymlinkFile": "",
+  "Commit": "bb25bef221309ea4463d6305c55fd76b309f2ff9",
+  "Entropy": 3.9539683,
+  "Author": "ombre-ui",
+  "Email": "ombre3115@gmail.com",
+  "Date": "2026-10-20T09:18:49Z",
+  "Message": "A4 API 3/4: workspace route tests (fake Supabase) covering auth, mass assignment, idempotency, history gate, logging",
+  "Tags": [],
+  "RuleID": "generic-api-key",
+  "Fingerprint": "bb25bef221309ea4463d6305c55fd76b309f2ff9:tests/api/workspace-helpers.js:generic-api-key:9"
+ },
+ {
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 24,
+  "EndLine": 24,
+  "StartColumn": 93,
+  "EndColumn": 118,
+  "Match": "KEY: 'REDACTED'",
+  "Secret": "REDACTED",
+  "File": "tests/scripts/scanners.test.js",
+  "SymlinkFile": "",
+  "Commit": "867adc126853aec8c862ea83c5a9ef5bb2067199",
+  "Entropy": 4.2479277,
+  "Author": "ombre-ui",
+  "Email": "ombre3115@gmail.com",
+  "Date": "2026-10-08T15:35:03Z",
+  "Message": "Feat: Phase A2 auth and secure session foundation\n\n* A2 (1/5): BFF foundation - config, cookie jar, CSRF/origin check, errors, redacting logger\n\n* A2 (2/5): BFF pipeline, validators, auth routes, Supabase SSR client factory, Node adapter, /api/auth/* entrypoints\n\n* A2 (3/5): frontend auth - AuthProvider, route guards, auth pages, App routing\n\n* A2 (4/5): real sign-out + read-only session email in Profile/Settings; storage and bundle secret scanners\n\n* A2 (5/5): Vercel config + security headers, pinned Supabase deps, local auth config, docs, unit/integration tests\n\n* A2: sync lockfile with auth dependencies\n\n* test: harden A2 auth integration harness",
+  "Tags": [],
+  "RuleID": "generic-api-key",
+  "Fingerprint": "867adc126853aec8c862ea83c5a9ef5bb2067199:tests/scripts/scanners.test.js:generic-api-key:24"
+ }
+]

@@ -1,105 +1,102 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { createId, makeConversation, makeMessage, makeProject, makeMemoryItem } from './types.js'
-
-/**
- * SESSION-ONLY DEMO DATA LAYER
- * ------------------------------------------------------------------
- * Profile, settings and theme are NOT here any more: they are real, server-owned state in
- * src/lib/user/UserStateProvider.jsx (Supabase through the same-origin BFF).
- *
- * What remains is the demo stand-in for domains that have no backend yet: conversations, projects, memory
- * items and the (always empty) library. It is held in React memory only. It is never written to browser
- * storage (scripts/check-browser-storage.mjs enforces that), starts empty, and contains no seeded or
- * invented content, so a reload loses it. The UI says so (see PreviewNotice).
- *
- * Integration boundary: each exported function below is where a real API call replaces the local state update
- * in the phase that owns that domain (conversations, projects, memory, library). Keep the function names and
- * shapes and component code will not need to change.
- *
- * sendMessage() is the AI boundary. It does NOT call a model. It produces a clearly labelled DEMO reply
- * (message.demo === true) so the chat UI can be exercised; nothing it produces is model output.
- */
-
-const DEMO_REPLY_TEXT =
-  'Demo response: Ombre isn\u2019t connected to an AI model yet, so this is placeholder text, not an answer. Nothing in this conversation is saved.'
+import { createContext, useCallback, useContext, useMemo, useReducer } from 'react'
+import { createId, makeMemoryItem } from './types.js'
+import { apiRequest } from './auth/api.js'
 
 function initialState() {
-  return { conversations: {}, projects: {}, libraryItems: {}, memoryItems: {} }
+  return {
+    conversations: {},
+    projects: {},
+    libraryItems: {},
+    savedItems: {},
+    memoryItems: {},
+    conversationStatus: {},
+  }
+}
+
+function normalizeMessage(message) {
+  return {
+    id: message.id,
+    conversationId: message.conversationId,
+    seq: message.seq,
+    role: message.role,
+    content: message.content,
+    status: message.status ?? 'complete',
+    demo: message.isDemo === true,
+    attachments: message.attachments ?? [],
+    createdAt: message.createdAt,
+  }
+}
+
+function normalizeConversation(conversation, messages = []) {
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    projectId: conversation.projectId ?? null,
+    mentorId: conversation.mentorId ?? null,
+    messageCount: conversation.messageCount ?? messages.length,
+    messages,
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+  }
+}
+
+function normalizeProject(project) {
+  return {
+    id: project.id,
+    name: project.name,
+    description: project.description ?? '',
+    archivedAt: project.archivedAt ?? null,
+    conversationCount: project.conversationCount ?? 0,
+    conversationIds: [],
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  }
 }
 
 function reducer(state, action) {
   switch (action.type) {
-    case 'CREATE_CONVERSATION': {
-      const conversation = action.conversation
-      return { ...state, conversations: { ...state.conversations, [conversation.id]: conversation } }
-    }
-    case 'ADD_MESSAGE': {
-      const { conversationId, message } = action
-      const conversation = state.conversations[conversationId]
-      if (!conversation) return state
-      const isFirstUserMessage = conversation.messages.length === 0 && message.role === 'user'
-      const updated = {
-        ...conversation,
-        title: isFirstUserMessage ? message.content.slice(0, 60) : conversation.title,
-        messages: [...conversation.messages, message],
-        updatedAt: new Date().toISOString(),
-      }
-      return { ...state, conversations: { ...state.conversations, [conversationId]: updated } }
-    }
-    case 'UPDATE_MESSAGE': {
-      const { conversationId, messageId, patch } = action
-      const conversation = state.conversations[conversationId]
-      if (!conversation) return state
-      const messages = conversation.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m))
+    case 'SET_CONVERSATION_STATUS':
       return {
         ...state,
-        conversations: {
-          ...state.conversations,
-          [conversationId]: { ...conversation, messages, updatedAt: new Date().toISOString() },
-        },
+        conversationStatus: { ...state.conversationStatus, [action.id]: action.status },
       }
-    }
-    case 'CREATE_PROJECT': {
-      const project = action.project
-      return { ...state, projects: { ...state.projects, [project.id]: project } }
-    }
-    case 'ADD_CONVERSATION_TO_PROJECT': {
-      const { conversationId, projectId } = action
-      const project = state.projects[projectId]
-      const conversation = state.conversations[conversationId]
-      if (!project || !conversation) return state
-      const conversationIds = project.conversationIds.includes(conversationId)
-        ? project.conversationIds
-        : [...project.conversationIds, conversationId]
+    case 'SET_CONVERSATION':
       return {
         ...state,
-        projects: { ...state.projects, [projectId]: { ...project, conversationIds } },
-        conversations: {
-          ...state.conversations,
-          [conversationId]: { ...conversation, projectId },
-        },
+        conversations: { ...state.conversations, [action.conversation.id]: action.conversation },
+        conversationStatus: { ...state.conversationStatus, [action.conversation.id]: 'ready' },
       }
+    case 'SET_PROJECTS':
+      return { ...state, projects: Object.fromEntries(action.projects.map((p) => [p.id, p])) }
+    case 'SET_PROJECT':
+      return { ...state, projects: { ...state.projects, [action.project.id]: action.project } }
+    case 'SET_LIBRARY':
+      return { ...state, libraryItems: Object.fromEntries(action.items.map((i) => [i.id, i])) }
+    case 'SET_SAVED':
+      return { ...state, savedItems: Object.fromEntries(action.items.map((i) => [i.id, i])) }
+    case 'SET_SAVED_ITEM':
+      return { ...state, savedItems: { ...state.savedItems, [action.item.id]: action.item } }
+    case 'DELETE_SAVED_ITEM': {
+      const next = { ...state.savedItems }
+      delete next[action.id]
+      return { ...state, savedItems: next }
     }
-    case 'ADD_MEMORY_ITEM': {
-      const item = action.item
-      return { ...state, memoryItems: { ...state.memoryItems, [item.id]: item } }
-    }
+    case 'ADD_MEMORY_ITEM':
+      return { ...state, memoryItems: { ...state.memoryItems, [action.item.id]: action.item } }
     case 'UPDATE_MEMORY_ITEM': {
-      const { id, patch } = action
-      const item = state.memoryItems[id]
+      const item = state.memoryItems[action.id]
       if (!item) return state
       return {
         ...state,
         memoryItems: {
           ...state.memoryItems,
-          [id]: { ...item, ...patch, updatedAt: new Date().toISOString() },
+          [action.id]: { ...item, ...action.patch, updatedAt: new Date().toISOString() },
         },
       }
     }
     case 'DELETE_MEMORY_ITEM': {
-      const { id } = action
       const next = { ...state.memoryItems }
-      delete next[id]
+      delete next[action.id]
       return { ...state, memoryItems: next }
     }
     default:
@@ -107,123 +104,203 @@ function reducer(state, action) {
   }
 }
 
+const LIST_LIMIT = 50
+
 const OmbreDataContext = createContext(null)
 
 export function OmbreDataProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState)
 
-  const createConversation = useCallback((opts) => {
-    const conversation = makeConversation(opts)
-    dispatch({ type: 'CREATE_CONVERSATION', conversation })
-    return conversation.id
+  const loadConversation = useCallback(async (id) => {
+    if (!id) return { ok: false, status: 400, error: { code: 'invalid_id', message: 'Conversation id is required.' } }
+
+    dispatch({ type: 'SET_CONVERSATION_STATUS', id, status: 'loading' })
+    const meta = await apiRequest(`/api/conversations/${id}`)
+    if (!meta.ok) {
+      dispatch({ type: 'SET_CONVERSATION_STATUS', id, status: meta.status === 404 ? 'missing' : 'error' })
+      return meta
+    }
+
+    const messages = await apiRequest(`/api/conversations/${id}/messages?limit=100`)
+    if (!messages.ok) {
+      dispatch({ type: 'SET_CONVERSATION_STATUS', id, status: messages.status === 404 ? 'missing' : 'error' })
+      return messages
+    }
+
+    const conversation = normalizeConversation(
+      meta.data.conversation,
+      (messages.data.messages ?? []).map(normalizeMessage),
+    )
+    dispatch({ type: 'SET_CONVERSATION', conversation })
+    return { ok: true, data: { conversation } }
   }, [])
 
   const getConversation = useCallback((id) => state.conversations[id] ?? null, [state.conversations])
 
-  const listConversations = useCallback(
-    () => Object.values(state.conversations).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
-    [state.conversations]
+  const getConversationStatus = useCallback(
+    (id) => (id ? state.conversationStatus[id] ?? 'idle' : 'idle'),
+    [state.conversationStatus],
   )
 
-  // Pending demo-reply timers, cleared on unmount so nothing fires after sign-out/navigation.
-  const timers = useRef(new Set())
-  useEffect(() => {
-    const active = timers.current
-    return () => {
-      active.forEach((id) => window.clearTimeout(id))
-      active.clear()
+  const listConversations = useCallback(async () => {
+    const result = await apiRequest(`/api/conversations?limit=${LIST_LIMIT}`)
+    if (!result.ok) return result
+    const conversations = (result.data.conversations ?? []).map((c) => normalizeConversation(c))
+    return { ok: true, data: { conversations } }
+  }, [])
+
+  const createConversation = useCallback(async ({
+    content,
+    mentorId = null,
+    projectId = null,
+    clientRequestId = createId(),
+  } = {}) => {
+    if (!content?.trim()) {
+      return { ok: false, status: 400, error: { code: 'invalid_content', message: 'A first message is required.' } }
     }
+
+    const result = await apiRequest('/api/conversations', {
+      method: 'POST',
+      body: { content, clientRequestId, mentorId, projectId },
+    })
+    if (!result.ok) return result
+
+    const message = normalizeMessage(result.data.message)
+    const conversation = normalizeConversation(result.data.conversation, [message])
+    dispatch({ type: 'SET_CONVERSATION', conversation })
+    return { ok: true, data: { conversation, message } }
   }, [])
 
-  // DEMO reply generator. Not a model. Replace with a real API call in the General AI phase.
-  const generateDemoReply = useCallback((conversationId, userText, messageId) => {
-    const delay = 700 + Math.random() * 700
-    const id = window.setTimeout(() => {
-      timers.current.delete(id)
-      if (userText.trim().toLowerCase() === 'error') {
-        dispatch({ type: 'UPDATE_MESSAGE', conversationId, messageId, patch: { status: 'error', content: '' } })
-        return
-      }
+  const sendMessage = useCallback(async (conversationId, text, clientRequestId = createId()) => {
+    if (!text?.trim()) {
+      return { ok: false, status: 400, error: { code: 'invalid_content', message: 'Message cannot be empty.' } }
+    }
+
+    const result = await apiRequest(`/api/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: { role: 'user', content: text, clientRequestId },
+    })
+    if (!result.ok) return result
+
+    const message = normalizeMessage(result.data.message)
+    const current = state.conversations[conversationId]
+    if (current) {
       dispatch({
-        type: 'UPDATE_MESSAGE',
-        conversationId,
-        messageId,
-        patch: { status: 'complete', content: DEMO_REPLY_TEXT },
+        type: 'SET_CONVERSATION',
+        conversation: {
+          ...current,
+          messages: [...current.messages, message],
+          messageCount: Math.max(current.messageCount ?? 0, message.seq),
+          updatedAt: message.createdAt,
+        },
       })
-    }, delay)
-    timers.current.add(id)
+    } else {
+      await loadConversation(conversationId)
+    }
+    return { ok: true, data: { message } }
+  }, [loadConversation, state.conversations])
+
+  const retryMessage = useCallback(async () => ({
+    ok: false,
+    status: 501,
+    error: { code: 'ai_unavailable', message: 'AI generation is not connected yet.' },
+  }), [])
+
+  const loadProjects = useCallback(async () => {
+    const result = await apiRequest(`/api/projects?limit=${LIST_LIMIT}`)
+    if (!result.ok) return result
+    const projects = (result.data.projects ?? []).map(normalizeProject)
+    dispatch({ type: 'SET_PROJECTS', projects })
+    return { ok: true, data: { projects } }
   }, [])
 
-  const sendMessage = useCallback(
-    (conversationId, text) => {
-      const userMessage = makeMessage({ conversationId, role: 'user', content: text, status: 'complete' })
-      dispatch({ type: 'ADD_MESSAGE', conversationId, message: userMessage })
-
-      const assistantMessage = makeMessage({
-        conversationId,
-        role: 'assistant',
-        content: '',
-        status: 'pending',
-        demo: true,
-      })
-      dispatch({ type: 'ADD_MESSAGE', conversationId, message: assistantMessage })
-      generateDemoReply(conversationId, text, assistantMessage.id)
-    },
-    [generateDemoReply]
-  )
-
-  const retryMessage = useCallback(
-    (conversationId, messageId) => {
-      dispatch({ type: 'UPDATE_MESSAGE', conversationId, messageId, patch: { status: 'pending' } })
-      const conversation = state.conversations[conversationId]
-      const lastUser = [...(conversation?.messages ?? [])].reverse().find((m) => m.role === 'user')
-      generateDemoReply(conversationId, lastUser?.content ?? '', messageId)
-    },
-    [generateDemoReply, state.conversations]
-  )
-
-  const createProject = useCallback((name, description) => {
-    const project = makeProject({ name, description })
-    dispatch({ type: 'CREATE_PROJECT', project })
-    return project.id
+  const createProject = useCallback(async (name, description = '') => {
+    const result = await apiRequest('/api/projects', {
+      method: 'POST',
+      body: { name, description },
+    })
+    if (!result.ok) return result
+    const project = normalizeProject(result.data.project)
+    dispatch({ type: 'SET_PROJECT', project })
+    return { ok: true, data: { project } }
   }, [])
 
   const getProject = useCallback((id) => state.projects[id] ?? null, [state.projects])
 
-  const addConversationToProject = useCallback((conversationId, projectId) => {
-    dispatch({ type: 'ADD_CONVERSATION_TO_PROJECT', conversationId, projectId })
-  }, [])
+  const addConversationToProject = useCallback(async (conversationId, projectId) => {
+    const result = await apiRequest(`/api/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: { projectId },
+    })
+    if (!result.ok) return result
+
+    const current = state.conversations[conversationId]
+    const conversation = normalizeConversation(result.data.conversation, current?.messages ?? [])
+    dispatch({ type: 'SET_CONVERSATION', conversation })
+    await loadProjects()
+    return { ok: true, data: { conversation } }
+  }, [loadProjects, state.conversations])
 
   const listProjects = useCallback(
-    () => Object.values(state.projects).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-    [state.projects]
+    () => Object.values(state.projects).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
+    [state.projects],
   )
 
-  const listConversationsForProject = useCallback(
-    (projectId) => {
-      const project = state.projects[projectId]
-      if (!project) return []
-      return project.conversationIds
-        .map((id) => state.conversations[id])
-        .filter(Boolean)
-        .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    },
-    [state.projects, state.conversations]
+  const listConversationsForProject = useCallback(async (projectId) => {
+    const result = await apiRequest(`/api/conversations?projectId=${encodeURIComponent(projectId)}&limit=${LIST_LIMIT}`)
+    if (!result.ok) return result
+    const conversations = (result.data.conversations ?? []).map((c) => normalizeConversation(c))
+    return { ok: true, data: { conversations } }
+  }, [])
+
+  const listLibraryItems = useCallback(async (filter = 'all') => {
+    const query = filter === 'all' ? '' : `?source=${encodeURIComponent(filter)}`
+    const result = await apiRequest(`/api/library${query}`)
+    if (!result.ok) return result
+    const items = result.data.items ?? []
+    dispatch({ type: 'SET_LIBRARY', items })
+    return { ok: true, data: { items } }
+  }, [])
+
+  const listSavedItems = useCallback(async () => {
+    const result = await apiRequest(`/api/saved?limit=${LIST_LIMIT}`)
+    if (!result.ok) return result
+    const items = (result.data.items ?? []).map((item) => ({
+      id: item.id, conversationId: item.conversationId, messageId: item.messageId ?? null, createdAt: item.createdAt,
+    }))
+    dispatch({ type: 'SET_SAVED', items })
+    return { ok: true, data: { items } }
+  }, [])
+
+  const saveMessage = useCallback(async (conversationId, messageId) => {
+    const result = await apiRequest('/api/saved', { method: 'POST', body: { conversationId, messageId } })
+    if (!result.ok) return result
+    const item = result.data.item
+    const normalized = { id: item.id, conversationId: item.conversationId, messageId: item.messageId ?? null, createdAt: item.createdAt }
+    dispatch({ type: 'SET_SAVED_ITEM', item: normalized })
+    return { ok: true, data: { item: normalized } }
+  }, [])
+
+  const deleteSavedItem = useCallback(async (id) => {
+    if (!id) return { ok: false, status: 400, error: { code: 'invalid_id', message: 'Saved item id is required.' } }
+    const result = await apiRequest(`/api/saved/${id}`, { method: 'DELETE' })
+    if (!result.ok) return result
+    dispatch({ type: 'DELETE_SAVED_ITEM', id })
+    return { ok: true, data: { id } }
+  }, [])
+
+  const isMessageSaved = useCallback(
+    (messageId) => Object.values(state.savedItems).some((item) => item.messageId === messageId),
+    [state.savedItems],
   )
 
-  // The library has no add path yet, so this is always empty until the Library phase.
-  const listLibraryItems = useCallback(
-    (filter = 'all') => {
-      const items = Object.values(state.libraryItems)
-      const filtered = filter === 'all' ? items : items.filter((item) => item.source === filter)
-      return filtered.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-    },
-    [state.libraryItems]
+  const getSavedItemForMessage = useCallback(
+    (messageId) => Object.values(state.savedItems).find((item) => item.messageId === messageId) ?? null,
+    [state.savedItems],
   )
-
   const listMemoryItems = useCallback(
     () => Object.values(state.memoryItems).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
-    [state.memoryItems]
+    [state.memoryItems],
   )
 
   const createMemoryItem = useCallback((label, content) => {
@@ -232,50 +309,40 @@ export function OmbreDataProvider({ children }) {
     return item.id
   }, [])
 
-  const updateMemoryItem = useCallback((id, patch) => {
-    dispatch({ type: 'UPDATE_MEMORY_ITEM', id, patch })
-  }, [])
+  const updateMemoryItem = useCallback((id, patch) => dispatch({ type: 'UPDATE_MEMORY_ITEM', id, patch }), [])
+  const deleteMemoryItem = useCallback((id) => dispatch({ type: 'DELETE_MEMORY_ITEM', id }), [])
 
-  const deleteMemoryItem = useCallback((id) => {
-    dispatch({ type: 'DELETE_MEMORY_ITEM', id })
-  }, [])
-
-  const value = useMemo(
-    () => ({
-      createConversation,
-      getConversation,
-      listConversations,
-      sendMessage,
-      retryMessage,
-      createProject,
-      getProject,
-      addConversationToProject,
-      listProjects,
-      listConversationsForProject,
-      listLibraryItems,
-      listMemoryItems,
-      createMemoryItem,
-      updateMemoryItem,
-      deleteMemoryItem,
-    }),
-    [
-      createConversation,
-      getConversation,
-      listConversations,
-      sendMessage,
-      retryMessage,
-      createProject,
-      getProject,
-      addConversationToProject,
-      listProjects,
-      listConversationsForProject,
-      listLibraryItems,
-      listMemoryItems,
-      createMemoryItem,
-      updateMemoryItem,
-      deleteMemoryItem,
-    ]
-  )
+  const value = useMemo(() => ({
+    loadConversation,
+    getConversation,
+    getConversationStatus,
+    listConversations,
+    createConversation,
+    sendMessage,
+    retryMessage,
+    loadProjects,
+    createProject,
+    getProject,
+    addConversationToProject,
+    listProjects,
+    listConversationsForProject,
+    listLibraryItems,
+    listSavedItems,
+    saveMessage,
+    deleteSavedItem,
+    isMessageSaved,
+    getSavedItemForMessage,
+    listMemoryItems,
+    createMemoryItem,
+    updateMemoryItem,
+    deleteMemoryItem,
+  }), [
+    loadConversation, getConversation, getConversationStatus, listConversations, createConversation,
+    sendMessage, retryMessage, loadProjects, createProject, getProject, addConversationToProject,
+    listProjects, listConversationsForProject, listLibraryItems, listSavedItems, saveMessage, deleteSavedItem,
+    isMessageSaved, getSavedItemForMessage, listMemoryItems, createMemoryItem,
+    updateMemoryItem, deleteMemoryItem,
+  ])
 
   return <OmbreDataContext.Provider value={value}>{children}</OmbreDataContext.Provider>
 }
