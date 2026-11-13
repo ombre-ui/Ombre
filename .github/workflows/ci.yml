@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 # Action versions are pinned by tag for now; pin by commit SHA during A8 hardening.
-# The three jobs are independent. The Supabase job does not need package-lock.json.
+# The three jobs are independent. The Supabase job runs npm ci only for the integration tests.
 
 jobs:
   build:
@@ -92,7 +92,7 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.1.0
 
       - name: Supabase CLI version
         run: supabase --version
@@ -126,6 +126,7 @@ jobs:
       # A migration SQL error (SQLSTATE) is a real failure and is never retried.
       # Only infrastructure failures before or around migrations are retried.
       - name: Reset database from migrations only (bounded retry)
+        id: reset
         run: |
           for attempt in 1 2 3; do
             log="$RUNNER_TEMP/sb-reset-${attempt}.log"
@@ -306,6 +307,28 @@ jobs:
             exit 1
           fi
 
+      - name: Install dependencies (integration tests)
+        if: ${{ !cancelled() && steps.reset.outcome == 'success' }}
+        run: npm ci
+
+      - name: Integration tests
+        if: ${{ !cancelled() && steps.reset.outcome == 'success' }}
+        env:
+          AUTH_INTEGRATION: '1'
+        run: |
+          set -o pipefail
+          supabase status -o env > "$RUNNER_TEMP/sb-status.env"
+          get() { sed -n -E "s/^$1=\"?([^\"]*)\"?\$/\1/p" "$RUNNER_TEMP/sb-status.env" | head -n 1; }
+          SUPABASE_URL="$(get API_URL)"
+          SUPABASE_PUBLISHABLE_KEY="$(get PUBLISHABLE_KEY)"
+          rm -f "$RUNNER_TEMP/sb-status.env"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "supabase status -o env did not provide API_URL and PUBLISHABLE_KEY"
+            exit 1
+          fi
+          export SUPABASE_URL SUPABASE_PUBLISHABLE_KEY
+          npm run test:integration 2>&1 | tee "$RUNNER_TEMP/integration.log"
+
       - name: Container diagnostics
         if: failure()
         run: |
@@ -337,5 +360,13 @@ jobs:
             ${{ runner.temp }}/database.types.generated.norm
             ${{ runner.temp }}/database.types.diff.txt
             ${{ runner.temp }}/types-cli-version.txt
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload integration log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-log
+          path: ${{ runner.temp }}/integration.log
           if-no-files-found: ignore
           retention-days: 7
