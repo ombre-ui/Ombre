@@ -102,7 +102,11 @@ export function toNode(route, options = {}) {
     try {
       // [spike] A client disconnect before the response finished aborts the request signal.
       const abort = new AbortController()
-      res.on('close', () => { if (!res.writableFinished) abort.abort() })
+      if (typeof res.on === 'function') {
+        res.on('close', () => {
+          if (!res.writableFinished) abort.abort()
+        })
+      }
 
       const headers = new Headers()
       for (const [key, value] of Object.entries(req.headers)) {
