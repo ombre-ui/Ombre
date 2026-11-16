@@ -12,6 +12,7 @@
 import { createRoute } from './pipeline.js'
 import { notFound } from './errors.js'
 import { MESSAGE_BODY_MAX_BYTES } from './workspaceData.js'
+import { createSseSpikeRoute } from './sseSpike.js' // [spike] throwaway A5.0 Step 4; never merge
 
 // URL parts after splitting '/api/<family>/<id>/<sub>' on '/': ['', 'api', family, id, sub].
 const FAMILIES = {
@@ -21,6 +22,9 @@ const FAMILIES = {
   library: { 3: 'libraryIndex', 4: 'libraryById' },
 }
 
+// [spike] The one exact path served by the SSE feasibility route (reached via the existing library rewrite).
+const SSE_SPIKE_PATH = '/api/library/spike-sse'
+
 // deps: the same { getConfig, createSupabase, logger } the routes were built with.
 // resources: the nine routes returned by createWorkspaceRoutes(deps).
 export function createWorkspaceDispatcher(deps, resources) {
@@ -29,6 +33,9 @@ export function createWorkspaceDispatcher(deps, resources) {
     throw notFound()
   })
   const routes = { ...resources, unknown }
+
+  // [spike] Gated by SSE_SPIKE_TOKEN and disabled in production; returns 404 otherwise.
+  const sseSpike = createSseSpikeRoute({ onEvent: (event, fields) => deps.logger?.info(`sse_spike.${event}`, fields) })
 
   // Returns the route that should handle this pathname (the generic 404 route when none does).
   // The query string is deliberately not an input: nothing a client puts in it can select a route.
@@ -44,7 +51,9 @@ export function createWorkspaceDispatcher(deps, resources) {
   }
 
   async function workspace(request) {
-    return select(new URL(request.url).pathname)(request)
+    const pathname = new URL(request.url).pathname
+    if (pathname === SSE_SPIKE_PATH) return sseSpike(request) // [spike] exact match, before select()
+    return select(pathname)(request)
   }
 
   // The Node adapter buffers up to this many bytes before the route runs. It is the largest per-route limit
