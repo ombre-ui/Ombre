@@ -27,7 +27,7 @@ export function createSseSpikeRoute({ onEvent = () => {} } = {}) {
   return async function sseSpike(request) {
     if (!allowed(request)) return notFound()
     if (request.method !== 'GET') return new Response(null, { status: 405, headers: { Allow: 'GET' } })
-    const q = new URL(request.url).searchParams // unknown params (e.g. platform __vf/__vp) are ignored
+    const q = new URL(request.url).searchParams // only the three named params are read; anything else is ignored
     const seconds = clamp(Number(q.get('seconds')) || 20, 1, 30)
     const tickMs = clamp(Number(q.get('tickMs')) || 1000, 100, 2000)
     const hbMs = clamp(Number(q.get('hbMs')) || 15000, 1000, 30000)
