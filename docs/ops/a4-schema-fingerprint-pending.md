@@ -1,5 +1,24 @@
 # A4 schema fingerprint, generated types and integration tests: pending items
 
+## Current status (reviewed at the A5.0 closeout)
+
+This file is partly historical. Sections below keep their original text; where a statement has been overtaken by later work, it is marked **Superseded** with the repository evidence.
+
+Completed (evidence in the repository):
+
+- The recorded baseline `docs/ops/schema-fingerprint.expected` is the post-A4 schema: `table|7`, `column|53`, `constraint|40`, `policy|18`, `index|20`, and `TOTAL|227`, with index coverage merged into `docs/ops/schema-fingerprint.sql`. The sections and counts equal the "A4 replay (predicted)" column below plus the 20 index rows described under "Coverage" below.
+- The CI step "Schema fingerprint matches the live baseline" in `.github/workflows/ci.yml` compares against that file and has no exception for A4.
+- The integration suites run in CI: `.github/workflows/ci.yml` has an "Integration tests" step that runs `npm run test:integration` (which includes both workspace suites listed in `package.json`) with `AUTH_INTEGRATION=1` after "Reset database from migrations only" succeeds (that step now has `id: reset`).
+- Runbook steps 1 to 6 below are recorded as completed or green in this file.
+
+Not established by this document or by repository evidence (left as originally written):
+
+- Runbook step 7 (deploy the API code and frontend, then the two-account smoke test): no completion is recorded here.
+- Two edits from the generated-types proposal were not applied: the types step has no `if:` guard, and `fingerprint.actual` is not in the diagnostics artifact. The `id: reset` edit was applied.
+- Extracting the type-comparison script into `scripts/` was deferred and no `scripts/` file for it is known here.
+
+The text below is the original status and is **Superseded** by the list above.
+
 Status: **Option A.** The recorded fingerprint (`docs/ops/schema-fingerprint.expected`) is the live A3 schema and stays
 authoritative. The A4 migrations are intentionally **not applied to production**, so the CI step "Schema fingerprint
 matches the live baseline" is **intentionally red** on any branch that contains them. CI is not changed to accept the
@@ -28,7 +47,11 @@ No A3 object is altered by the A4 migrations: they only create new objects, enab
 `public.user_settings` inside policy subqueries. The four A3 migration files are byte-identical on `main` and on the
 branch.
 
-### Coverage not yet in the CI-compared fingerprint
+### Coverage (originally "not yet in the CI-compared fingerprint")
+
+**Superseded:** the index coverage has since been merged into `docs/ops/schema-fingerprint.sql` (runbook step 5) and `schema-fingerprint.expected` contains `index|20`. The standalone `docs/ops/schema-fingerprint-coverage.sql` still exists and `ci.yml` does not read it. The A3 values and the predicted A4 values below are kept as the historical record.
+
+Original text: `docs/ops/schema-fingerprint-coverage.sql` (not read by CI) fingerprints
 
 `docs/ops/schema-fingerprint-coverage.sql` (not read by CI) fingerprints indexes and Realtime publication membership.
 Live A3 values: `index|2|ee150a218b04609e5bfd9c34e87f8419`, no `publication` rows (an empty publication is an absent
@@ -48,7 +71,7 @@ statically checks that every foreign key on an A4 table has a covering index.
 4. Confirm a local replay produces the same output. **The repository's A4 DB/API suites are green; CI replay remains the authoritative reproducibility check.**
 5. Merge the index/publication coverage into `schema-fingerprint.sql`, regenerate `schema-fingerprint.expected` from the live output, and update the pinned snapshot in `tests/scripts/fingerprint-sql.test.js`. **Completed.**
 6. Regenerate `supabase/types/database.types.ts`. **Completed from the live A4 schema.**
-7. Deploy the API code, then the frontend, then run the two-account smoke test.
+7. Deploy the API code, then the frontend, then run the two-account smoke test. (Completion is not recorded in this document.)
 
 ## Rollback plan
 
@@ -63,6 +86,8 @@ Reverse order is:
 5. `20261020120000_a4_projects.sql`
 
 Before any destructive rollback, take a database backup/snapshot if available and verify that no dependent A4 objects or application deployment remain active. The exact `DROP` statements should be generated from the applied migration definitions rather than improvised during an incident.
+
+**Superseded:** `.github/workflows/ci.yml` now has an "Integration tests" step in the `supabase` job (see "Current status" above). It differs from the proposal below: it reads `API_URL` and `PUBLISHABLE_KEY` from `supabase status -o env`, runs `npm run test:integration` (all four integration suites), and runs only after the database reset succeeds. The original text and proposal are kept for the record.
 
 ## A4 integration tests (real database)
 
@@ -100,7 +125,10 @@ The `supabase status -o env` variable names depend on the CLI version (`ANON_KEY
 auth integration job or `docs/auth.md` shows which pair the A2/A3 suites use. As of this writing neither suite has been
 executed anywhere.
 
-## Generated-types check (pending)
+## Generated-types check (historical proposal, partly applied)
+
+**Superseded in part:** `id: reset` exists in `ci.yml`. The `if:` guard on the types step and the extra `fingerprint.actual` artifact path were not applied. Because the fingerprint baseline has been regenerated, the fingerprint step is no longer expected to fail on A4. If it does fail, later steps without an `if:` guard (including the types check) are skipped. The original text follows.
+
 
 The type-drift step can now run against the regenerated A4 baseline. Before the baseline update, the fingerprint step blocked it. This remains an intentional CI limitation until the A4 production fingerprint is regenerated. The workflow
 cannot be changed through the integration used for this branch (GitHub answers 403 "Resource not accessible by
