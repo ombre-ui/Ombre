@@ -479,3 +479,269 @@ suite('deleting the auth user cascades every A4 table', async () => {
   users.splice(users.indexOf(a), 1)
   for (const t of tables) assert.equal(await count(t, `user_id=${q(a)}`), '0', t)
 })
+
+// ===================================================================================================================
+// A5.1 / S3: public.append_assistant_message(p_conversation_id, p_user_message_id, p_content)
+// Appended to the A4 database suite; uses the helpers defined above (psql, run, fails, asUser, asAnon, asOwner,
+// newUser, mkConversation, mkMessage, scalar, count, q, nul). The function writes a genuine assistant reply
+// (role assistant, is_demo false). It is NOT a provenance mechanism: an authenticated user can call it directly for
+// their own eligible conversation (known A5.1 limitation, see the function comment). These tests pin the bounded behaviour.
+// save_history = true is required for both writing a reply and replaying one.
+// ===================================================================================================================
+
+const RPC_SIG = 'public.append_assistant_message(uuid,uuid,text)'
+const rpcSql = (conv, msg, content) =>
+  `select '@@'||(${RPC_SIG.split('(')[0]}(${nul(conv)}, ${nul(msg)}, ${content == null ? 'null' : q(content)}))::text;`
+const rpc = async (uid, conv, msg, content) => JSON.parse((await run(asUser(uid, rpcSql(conv, msg, content))))[0])
+const seqId = (conv, seq) => scalar(`select id from public.messages where conversation_id=${q(conv)} and seq=${seq}`)
+const shape = (conv) => run(asOwner(`select '@@'||seq||':'||role||':'||is_demo from public.messages where conversation_id=${q(conv)} order by seq;`))
+
+suite('append_assistant_message: execute privilege, SECURITY DEFINER, fixed search_path, no extra privileges', async () => {
+  const yes = async (expr) => assert.equal(await scalar(expr), 'true', expr)
+  const no = async (expr) => assert.equal(await scalar(expr), 'false', expr)
+  await yes(`has_function_privilege('authenticated','${RPC_SIG}','execute')`)
+  await no(`has_function_privilege('anon','${RPC_SIG}','execute')`)
+  await no(`has_function_privilege('service_role','${RPC_SIG}','execute')`)
+  assert.equal(await scalar(`select count(*) from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where p.proname='append_assistant_message' and a.grantee=0`), '0', 'no PUBLIC execute')
+  assert.equal(
+    await scalar(`select string_agg(g, ',' order by g) from (select a.grantee::regrole::text g from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where p.proname='append_assistant_message') s`),
+    'authenticated,postgres',
+  )
+  assert.equal(await scalar(`select count(*) from pg_proc where proname='append_assistant_message'`), '1')
+  assert.equal(await scalar(`select prosecdef from pg_proc where proname='append_assistant_message'`), 'true')
+  assert.equal(await scalar(`select array_to_string(proconfig, ',') from pg_proc where proname='append_assistant_message'`), 'search_path=""')
+  // no caller-controlled user_id / role / is_demo / seq / key parameter: exactly the three approved arguments
+  assert.equal(await scalar(`select pronargs||':'||pg_get_function_arguments(oid) from pg_proc where proname='append_assistant_message'`), '3:p_conversation_id uuid, p_user_message_id uuid, p_content text')
+  // the function adds no table privilege and no policy: messages keeps its two policies and its column-level insert grants
+  assert.equal(await scalar(`select count(*) from pg_policies where schemaname='public' and tablename='messages'`), '2')
+  for (const c of ['id', 'user_id', 'seq', 'created_at']) await no(`has_column_privilege('authenticated','public.messages','${c}','insert')`)
+  await no(`has_any_column_privilege('authenticated','public.messages','update')`)
+  await no(`has_table_privilege('authenticated','public.messages','delete')`)
+})
+
+suite('append_assistant_message: signed-out and identity-less callers are refused', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const target = await seqId(conv, 1)
+  await fails(asAnon(rpcSql(conv, target, 'x')), /permission denied/)
+  // role authenticated but no `sub` claim: auth.uid() is null
+  const noSub = `begin;\nset local role authenticated;\nselect set_config('request.jwt.claims', '{"role":"authenticated","aud":"authenticated"}', true) \\gset\n${rpcSql(conv, target, 'x')}\ncommit;\n`
+  await fails(noSub, /not authenticated/)
+  assert.equal(await count('messages', `conversation_id=${q(conv)}`), '1')
+})
+
+suite('append_assistant_message: the owner appends exactly one genuine reply with fixed role, demo flag and null key', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a, { content: 'question' })
+  const target = await seqId(conv, 1)
+  const out = await rpc(a, conv, target, 'the answer')
+  assert.equal(out.replayed, false)
+  assert.equal(out.message.seq, 2)
+  assert.equal(out.message.role, 'assistant')
+  assert.equal(out.message.is_demo, false)
+  assert.equal(out.message.content, 'the answer')
+  assert.equal(out.message.conversation_id, conv)
+  assert.deepEqual(Object.keys(out.message).sort(), ['content', 'conversation_id', 'created_at', 'id', 'is_demo', 'role', 'seq'])
+  assert.equal(await scalar(`select user_id=${q(a)} and client_request_id is null and role='assistant' and not is_demo from public.messages where id=${q(out.message.id)}`), 'true')
+  assert.equal(await scalar(`select message_count from public.conversations where id=${q(conv)}`), '2')
+  assert.deepEqual(await shape(conv), ['1:user:false', '2:assistant:false'])
+  // the conversation continues normally afterwards
+  await mkMessage(a, conv, { content: 'follow up' })
+  assert.deepEqual(await shape(conv), ['1:user:false', '2:assistant:false', '3:user:false'])
+})
+
+suite('append_assistant_message: another user\'s conversation or message is refused as not found, and nothing is written', async () => {
+  const a = await newUser()
+  const b = await newUser()
+  const convA = await mkConversation(a)
+  const targetA = await seqId(convA, 1)
+  const convB = await mkConversation(b)
+  await fails(asUser(b, rpcSql(convA, targetA, 'intrusion')), /conversation not found/)
+  await fails(asUser(b, rpcSql(convB, targetA, 'intrusion')), /message not found/) // own conversation, foreign message id
+  await fails(asUser(b, rpcSql(randomUUID(), targetA, 'x')), /conversation not found/) // nonexistent looks identical
+  await fails(asUser(a, rpcSql(convA, randomUUID(), 'x')), /message not found/)
+  await fails(asUser(a, rpcSql(convA, await seqId(convB, 1), 'x')), /message not found/) // own conversation, message of another conversation
+  assert.deepEqual(await shape(convA), ['1:user:false'])
+  assert.deepEqual(await shape(convB), ['1:user:false'])
+})
+
+suite('append_assistant_message: assistant and demo targets are refused (OL002); a demo user message cannot exist', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const demo = await mkMessage(a, conv, { role: 'assistant', demo: true, content: 'demo reply' })
+  await fails(asUser(a, rpcSql(conv, demo, 'x')), /target is not a user message/)
+  // a genuine assistant reply is not a valid target either
+  const conv2 = await mkConversation(a)
+  const reply = (await rpc(a, conv2, await seqId(conv2, 1), 'genuine')).message.id
+  await fails(asUser(a, rpcSql(conv2, reply, 'again')), /target is not a user message/)
+  // a user message cannot be a demo message at all (messages_demo_requires_assistant_check), even for the owner
+  await fails(asOwner(`insert into public.messages (conversation_id, user_id, role, content, is_demo) values (${q(conv)}, ${q(a)}, 'user', 'x', true);`), /messages_demo_requires_assistant_check/)
+  assert.deepEqual(await shape(conv), ['1:user:false', '2:assistant:true'])
+  assert.deepEqual(await shape(conv2), ['1:user:false', '2:assistant:false'])
+})
+
+suite('append_assistant_message: a stale target is refused (OL002) and writes nothing', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const first = await seqId(conv, 1)
+  await mkMessage(a, conv, { content: 'newer user message' })
+  await fails(asUser(a, rpcSql(conv, first, 'late reply')), /target is not the latest message/)
+  assert.deepEqual(await shape(conv), ['1:user:false', '2:user:false'])
+  // a demo reply at seq + 1 is not a genuine reply, so it is stale, not a replay
+  const conv2 = await mkConversation(a)
+  const t2 = await seqId(conv2, 1)
+  await mkMessage(a, conv2, { role: 'assistant', demo: true })
+  await mkMessage(a, conv2, { content: 'and another' })
+  await fails(asUser(a, rpcSql(conv2, t2, 'x')), /target is not the latest message/)
+  assert.deepEqual(await shape(conv2), ['1:user:false', '2:assistant:true', '3:user:false'])
+  assert.equal(await scalar(`select message_count from public.conversations where id=${q(conv2)}`), '3')
+})
+
+suite('append_assistant_message: a repeated call replays the existing reply, even after later messages', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const target = await seqId(conv, 1)
+  const created = await rpc(a, conv, target, 'first answer')
+  const again = await rpc(a, conv, target, 'DIFFERENT second answer')
+  assert.equal(again.replayed, true)
+  assert.equal(again.message.id, created.message.id)
+  assert.equal(again.message.content, 'first answer', 'the stored reply wins; the second content is discarded')
+  assert.equal(await scalar(`select message_count from public.conversations where id=${q(conv)}`), '2')
+  await mkMessage(a, conv, { content: 'next question' })
+  const late = await rpc(a, conv, target, 'x')
+  assert.equal(late.replayed, true)
+  assert.equal(late.message.id, created.message.id)
+  assert.deepEqual(await shape(conv), ['1:user:false', '2:assistant:false', '3:user:false'])
+})
+
+suite('append_assistant_message: save_history = false or a missing settings row blocks both a new reply and a replay', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const target = await seqId(conv, 1)
+  // new-reply path
+  await run(asOwner(`update public.user_settings set save_history=false where user_id=${q(a)};`))
+  await fails(asUser(a, rpcSql(conv, target, 'x')), /history is off/)
+  assert.deepEqual(await shape(conv), ['1:user:false'])
+  assert.equal(await scalar(`select message_count from public.conversations where id=${q(conv)}`), '1', 'the refused call left the counter alone')
+  // replay path, target still latest (the reply is seq 2 and is the last message)
+  await run(asOwner(`update public.user_settings set save_history=true where user_id=${q(a)};`))
+  const created = await rpc(a, conv, target, 'answer')
+  await run(asOwner(`update public.user_settings set save_history=false where user_id=${q(a)};`))
+  await fails(asUser(a, rpcSql(conv, target, 'x')), /history is off/)
+  // replay path, target no longer latest (a later user message exists)
+  await run(asOwner(`update public.user_settings set save_history=true where user_id=${q(a)};`))
+  await mkMessage(a, conv, { content: 'next question' })
+  await run(asOwner(`update public.user_settings set save_history=false where user_id=${q(a)};`))
+  await fails(asUser(a, rpcSql(conv, target, 'x')), /history is off/)
+  assert.deepEqual(await shape(conv), ['1:user:false', '2:assistant:false', '3:user:false'])
+  // turning history back on makes the same replay work again, returning the original reply
+  await run(asOwner(`update public.user_settings set save_history=true where user_id=${q(a)};`))
+  const again = await rpc(a, conv, target, 'x')
+  assert.equal(again.replayed, true)
+  assert.equal(again.message.id, created.message.id)
+  // a missing settings row fails closed on both paths
+  const b = await newUser()
+  const convB = await mkConversation(b)
+  const targetB = await seqId(convB, 1)
+  await run(asOwner(`delete from public.user_settings where user_id=${q(b)};`))
+  await fails(asUser(b, rpcSql(convB, targetB, 'x')), /history is off/)
+  assert.deepEqual(await shape(convB), ['1:user:false'])
+  const c = await newUser()
+  const convC = await mkConversation(c)
+  const targetC = await seqId(convC, 1)
+  await rpc(c, convC, targetC, 'answer')
+  await run(asOwner(`delete from public.user_settings where user_id=${q(c)};`))
+  await fails(asUser(c, rpcSql(convC, targetC, 'x')), /history is off/)
+})
+
+suite('append_assistant_message: null arguments are refused (22023)', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const target = await seqId(conv, 1)
+  await fails(asUser(a, rpcSql(null, target, 'x')), /invalid arguments/)
+  await fails(asUser(a, rpcSql(conv, null, 'x')), /invalid arguments/)
+  await fails(asUser(a, rpcSql(conv, target, null)), /invalid arguments/)
+  assert.deepEqual(await shape(conv), ['1:user:false'])
+})
+
+suite('append_assistant_message: the existing message CHECKs still apply (8000 characters, non-blank), and a failed call writes nothing', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const target = await seqId(conv, 1)
+  const check = /messages_content_check/
+  await fails(asUser(a, rpcSql(conv, target, 'x'.repeat(8001))), check)
+  await fails(asUser(a, rpcSql(conv, target, '')), check)
+  await fails(asUser(a, rpcSql(conv, target, '   ')), check)
+  assert.deepEqual(await shape(conv), ['1:user:false'])
+  assert.equal(await scalar(`select message_count from public.conversations where id=${q(conv)}`), '1', 'the failed insert rolled its counter bump back')
+  // the limit is in characters, not bytes: 8000 two-byte characters fit
+  const ok = await rpc(a, conv, target, 'é'.repeat(8000))
+  assert.equal(await scalar(`select char_length(content) from public.messages where id=${q(ok.message.id)}`), '8000')
+  // characterisation: btrim trims spaces only, so a newline-only reply passes the database. The API must reject
+  // whitespace-only output itself (S4); this pins the database behaviour so that rule is deliberate.
+  const conv2 = await mkConversation(a)
+  assert.equal((await rpc(a, conv2, await seqId(conv2, 1), '\n\n')).message.content, '\n\n')
+})
+
+suite('append_assistant_message: the 500-message cap is exact', async () => {
+  const a = await newUser()
+  // 499 messages with the last one a user message: the reply is the 500th and fits
+  const fits = await mkConversation(a)
+  await run(asUser(a, `insert into public.messages (conversation_id, role, content) select ${q(fits)}, 'user', 'm'||g from generate_series(1,498) g;`))
+  assert.equal((await rpc(a, fits, await seqId(fits, 499), 'last slot')).message.seq, 500)
+  // 500 messages with the last one a user message: the reply cannot be stored
+  const full = await mkConversation(a)
+  await run(asUser(a, `insert into public.messages (conversation_id, role, content) select ${q(full)}, 'user', 'm'||g from generate_series(1,499) g;`))
+  await fails(asUser(a, rpcSql(full, await seqId(full, 500), 'no room')), /limit_reached/)
+  assert.equal(await scalar(`select count(*)||':'||max(seq) from public.messages where conversation_id=${q(full)}`), '500:500')
+  assert.equal(await scalar(`select message_count from public.conversations where id=${q(full)}`), '500')
+})
+
+suite('append_assistant_message: concurrent calls for the same target store one reply and all return it', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  const target = await seqId(conv, 1)
+  const results = await Promise.all(Array.from({ length: 10 }, (_, i) => psql(asUser(a, rpcSql(conv, target, `candidate ${i}`)))))
+  assert.ok(results.every((r) => r.ok), results.find((r) => !r.ok)?.stderr)
+  const outs = results.map((r) => JSON.parse(values(r.stdout)[0]))
+  assert.equal(outs.filter((o) => !o.replayed).length, 1, 'exactly one call wrote')
+  assert.equal(new Set(outs.map((o) => o.message.id)).size, 1, 'every call returned the same stored reply')
+  assert.equal(new Set(outs.map((o) => o.message.content)).size, 1)
+  assert.equal(await count('messages', `conversation_id=${q(conv)} and role='assistant'`), '1')
+  assert.equal(await scalar(`select message_count from public.conversations where id=${q(conv)}`), '2')
+  assert.deepEqual(await shape(conv), ['1:user:false', '2:assistant:false'])
+})
+
+suite('append_assistant_message vs a concurrent new user message: either order is consistent, with no gap or duplicate', async () => {
+  const a = await newUser()
+  const seen = new Set()
+  for (let i = 0; i < 8; i += 1) {
+    const conv = await mkConversation(a)
+    const target = await seqId(conv, 1)
+    const [reply, next] = await Promise.all([
+      psql(asUser(a, rpcSql(conv, target, 'reply'))),
+      psql(asUser(a, `insert into public.messages (conversation_id, role, content) values (${q(conv)}, 'user', 'next');`)),
+    ])
+    assert.ok(next.ok, next.stderr)
+    const rows = await shape(conv)
+    if (reply.ok) {
+      seen.add('reply-first')
+      assert.deepEqual(rows, ['1:user:false', '2:assistant:false', '3:user:false'])
+    } else {
+      seen.add('user-first')
+      assert.match(reply.stderr, /target is not the latest message/)
+      assert.deepEqual(rows, ['1:user:false', '2:user:false'])
+    }
+    assert.equal(await scalar(`select message_count from public.conversations where id=${q(conv)}`), String(rows.length))
+  }
+  assert.ok(seen.size >= 1) // which order wins is scheduling; both outcomes are valid and both were checked above
+})
+
+suite('append_assistant_message: direct (assistant, is_demo = false) table inserts stay denied', async () => {
+  const a = await newUser()
+  const conv = await mkConversation(a)
+  await fails(asUser(a, `insert into public.messages (conversation_id, role, content, is_demo) values (${q(conv)}, 'assistant', 'forged', false);`), /row-level security/)
+  await fails(asUser(a, `insert into public.messages (conversation_id, role, content) values (${q(conv)}, 'assistant', 'forged');`), /row-level security/)
+  await fails(asUser(a, `insert into public.messages (user_id, conversation_id, role, content, is_demo) values (${q(a)}, ${q(conv)}, 'assistant', 'forged', false);`), /permission denied/)
+  assert.deepEqual(await shape(conv), ['1:user:false'])
+})

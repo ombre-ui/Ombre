@@ -139,7 +139,9 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "create_conversation":
+            "append_assistant_message":
+{ Args: { "p_content": string,"p_conversation_id": string,"p_user_message_id": string }; Returns: Json
+                           },"create_conversation":
 { Args: { "p_client_request_id": string,"p_content": string,"p_mentor_id": string,"p_project_id": string,"p_title": string }; Returns: Json
                            }
           }
