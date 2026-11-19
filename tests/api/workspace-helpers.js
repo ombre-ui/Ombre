@@ -49,6 +49,8 @@ export function fakeSupabase({ user = { id: USER }, authError = null, handler })
 }
 
 // Builds the nine routes plus the dispatcher (routes.workspace) exactly as api/_lib/real.js does.
+// options.ai (optional): the AI runtime the generation route will receive as deps.ai (A5.1 S4). Callers that omit
+// it get exactly the dependencies they always had.
 export function buildWorkspace(options) {
   const { lines, logger } = memoryLogger()
   const fake = fakeSupabase(options)
@@ -57,9 +59,10 @@ export function buildWorkspace(options) {
     createSupabase: () => ({ supabase: fake.supabase, jar: null }),
     logger,
   }
+  if (options.ai !== undefined) deps.ai = options.ai
   const resources = createWorkspaceRoutes(deps)
   const routes = { ...resources, workspace: createWorkspaceDispatcher(deps, resources) }
-  return { routes, lines, calls: fake.calls }
+  return { routes, lines, calls: fake.calls, ai: options.ai }
 }
 
 export const ok = (data) => ({ data, error: null, status: 200 })
