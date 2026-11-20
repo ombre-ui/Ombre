@@ -60,8 +60,14 @@ test('AI code lives only under api/_lib/ai, an underscore path that is never a d
   }
 })
 
-test('S4-A AI modules read no environment (only config.js takes an env object) and open no network connection', () => {
-  const files = walk(AI_DIR).filter((f) => SOURCE_EXT.test(f))
+// The generated mentor prompt module is data: its text is prose written for models, which may legitimately mention
+// words such as fetch( or WebSocket, so the code-hygiene scan below skips it. It is still covered by every other
+// check in this file (it lives under api/_lib/ai and src/ must not reference it).
+const GENERATED_DATA = new Set(['api/_lib/ai/mentorPromptsData.js'])
+const relPath = (file) => relative(ROOT, file).split('\\').join('/')
+
+test('AI server code reads no environment (only config.js takes an env object) and opens no network connection', () => {
+  const files = walk(AI_DIR).filter((f) => SOURCE_EXT.test(f) && !GENERATED_DATA.has(relPath(f)))
   assert.ok(files.length >= 3)
   for (const file of files) {
     const text = readFileSync(file, 'utf8')
