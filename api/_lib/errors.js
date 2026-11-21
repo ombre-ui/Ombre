@@ -22,6 +22,9 @@ const MESSAGES = {
   limit_reached: 'You have reached a limit. Remove something and try again.',
   history_disabled: 'History is turned off, so this was not saved.',
   service_unavailable: 'Ombre is temporarily unavailable. Try again shortly.',
+  ai_unavailable: 'The AI service is temporarily unavailable. Try again shortly.',
+  ai_timeout: 'The AI service took too long to respond. Try again.',
+  ai_failed: 'The AI service could not produce a response. Try again.',
   internal_error: 'Something went wrong.',
 }
 
@@ -46,6 +49,9 @@ export const notFound = () => new ApiError(404, 'not_found')
 export const conflict = (code = 'conflict') => new ApiError(409, code)
 export const tooManyRequests = () => new ApiError(429, 'rate_limited')
 export const unavailable = () => new ApiError(503, 'service_unavailable')
+export const aiUnavailable = () => new ApiError(503, 'ai_unavailable')
+export const aiTimeout = () => new ApiError(504, 'ai_timeout')
+export const aiFailed = () => new ApiError(502, 'ai_failed')
 export const methodNotAllowed = (allow) =>
   new ApiError(405, 'method_not_allowed', { headers: { Allow: allow.join(', ') } })
 

@@ -5,6 +5,7 @@ import { createRoutes } from './routes.js'
 import { createUserRoutes } from './userRoutes.js'
 import { createWorkspaceRoutes } from './workspaceRoutes.js'
 import { createWorkspaceDispatcher } from './workspaceDispatch.js'
+import { createAiRuntime } from './ai/runtime.js'
 
 let cachedConfig = null
 function getConfig() {
@@ -16,6 +17,7 @@ const deps = {
   getConfig,
   createSupabase: createSupabaseForRequest,
   logger: createLogger(),
+  ai: createAiRuntime({ env: process.env }), // lazy: bad AI config surfaces as 503 ai_unavailable per request
 }
 
 const workspaceResources = createWorkspaceRoutes(deps)
