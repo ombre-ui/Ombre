@@ -59,9 +59,11 @@ import {
   rowToSaved,
 } from './workspaceData.js'
 
+import { GENERATE_BODY_KEYS, createGenerateHandler } from './ai/generateRoute.js'
+
 const pageQuery = () => ({ limit: limitParam(), cursor: cursorParam() })
 
-export function createWorkspaceRoutes({ getConfig, createSupabase, logger }) {
+export function createWorkspaceRoutes({ getConfig, createSupabase, logger, ai }) {
   const route = (options, fn) => createRoute({ getConfig, createSupabase, logger }, options, fn)
 
   // ---------------------------------------------------------------- projects
@@ -272,6 +274,14 @@ export function createWorkspaceRoutes({ getConfig, createSupabase, logger }) {
     return { status: 200, body: { message: rowToMessage(message) } }
   }
 
+  // POST /api/conversations/:id/generate  { messageId }   (A5.1 S4-C, complete response, no streaming)
+  // 201 = a new assistant message was persisted, 200 = an existing one is replayed. The handler and its
+  // lifecycle live in api/_lib/ai/generateRoute.js; the client sends only the target message id.
+  const conversationGenerate = route(
+    { methods: ['POST'], path: '/api/conversations/:id/generate', query: {}, body: { POST: GENERATE_BODY_KEYS } },
+    createGenerateHandler({ ai }),
+  )
+
   // ------------------------------------------------------------------- saved
 
   // GET /api/saved?limit&cursor   POST /api/saved { conversationId, messageId? }
@@ -346,6 +356,7 @@ export function createWorkspaceRoutes({ getConfig, createSupabase, logger }) {
     conversationsIndex,
     conversationById,
     conversationMessages,
+    conversationGenerate,
     savedIndex,
     savedById,
     libraryIndex,
