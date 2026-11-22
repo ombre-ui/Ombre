@@ -38,6 +38,7 @@ export function createWorkspaceDispatcher(deps, resources) {
     if (parts.length < 3 || parts[0] !== '' || parts[1] !== 'api') return routes.unknown
     const family = parts[2]
     if (family === 'conversations' && parts.length === 5 && parts[4] === 'messages') return routes.conversationMessages
+    if (family === 'conversations' && parts.length === 5 && parts[4] === 'generate') return routes.conversationGenerate
     const shapes = Object.prototype.hasOwnProperty.call(FAMILIES, family) ? FAMILIES[family] : null
     const name = shapes ? shapes[parts.length] : undefined
     return name ? routes[name] : routes.unknown
